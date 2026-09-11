@@ -92,7 +92,7 @@
           <button class="btn" t-on:click="count = count + 1">count + 1（现 {{ count }}）</button>
           <mini-counter></mini-counter>
         </div>
-        <p class="muted">右边的独立按钮是 Tee.define 组件自己的 data，和页面 count 互不污染。</p>
+        <p class="muted">右边的独立按钮是 <code>setup()</code> 组件自己的状态，和页面 count 互不污染。词是 setup / computed，合同是同一份对象、没有重渲染。</p>
       </div>
       <div class="stage">
         <div class="stage-bar"><span class="dots"><i></i><i></i><i></i></span><span>live / computed</span></div>
@@ -282,8 +282,8 @@
           <tr><th>接口</th><th>作用</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>weave(c => …)</code></td><td>往 Chart 上记账：hold / derive / trail / act / pin。组合是函数嵌套，不是返回一包 ref。</td></tr>
-          <tr><td><code>Tee.create(options)</code></td><td>挂载。options 可以是 weave，也可以是 data/computed 对象填法。</td></tr>
+          <tr><td><code>setup(c => …)</code></td><td>组合入口。c 就是模板读的那份对象。computed / watch / onMounted / ref 都是原词。组合函数往 c 上写字段，也可以 return 一包 ref，Tee 会拆到同一份对象。</td></tr>
+          <tr><td><code>Tee.create(options)</code></td><td>挂载。options 可以是 setup，也可以是 data / computed / methods。这一页用的是后者。</td></tr>
           <tr><td><code>Tee.define(name, def)</code></td><td>注册自定义标签。def 可含 template、data、computed、methods、watch。</td></tr>
           <tr><td><code>{{ syntaxExpr }}</code></td><td>插值。每个表达式一个活文本节点。</td></tr>
           <tr><td><code>t-if</code> / <code>t-else-if</code> / <code>t-else</code></td><td>互斥分支，同一时刻只存在一块真实 DOM。</td></tr>
@@ -352,7 +352,7 @@ export default {
     form: { email: "", agree: false },
     card: { title: "点对点工程师", role: "Tee runtime", bio: "不写 VNode，只修真节点。" },
     faqs: [
-      { id: 1, q: "为什么不是 Vue？", a: "没有模板编译成 VNode，也没有响应式再走 patch。映射表直接指向 Node。调度是 Tee Strata，不是组件树重渲染。" },
+      { id: 1, q: "为什么不是 Vue？", a: "词是同一套：setup、computed、watch。合同不是：没有模板编译成 VNode，也没有组件级重渲染。c.count 就是 {{ count }}，更新走映射表。" },
       { id: 2, q: "为什么不是 React？", a: "没有函数组件渲染和 Fiber 调和。状态变了不去重画子树。" },
       { id: 3, q: "列表怎么更新？", a: "t-repeat 按 t-key 移动已有元素，新增则编译新实例，不是虚拟列表 diff。" },
     ],
@@ -393,13 +393,13 @@ export default {
     ],
     snippets: {
       interp: `<h4>{{ title }}</h4>\\n<p>{{ guest }} · {{ bio }}</p>`,
-      computed: `computed: {\\n  invoiceTotal() {\\n    return this.price * this.qty * 1.06\\n  }\\n}`,
-      watch: `watch: {\\n  invoiceTotal(next, prev) {\\n    logs.unshift(prev + " → " + next)\\n  }\\n}`,
+      computed: `setup((c) => {\\n  c.price = 42\\n  c.qty = 2\\n  c.invoiceTotal = computed(() => c.price * c.qty * 1.06)\\n})`,
+      watch: `watch(() => c.invoiceTotal, (next, prev) => {\\n  logs.unshift(prev + " → " + next)\\n})`,
       show: `<div t-if="mode === 'ready'">就绪</div>\\n<div t-else-if="mode === 'error'">错误</div>\\n<div t-else>空态</div>`,
       repeat: `<section t-repeat="dept in depts" t-key="dept.id">\\n  <div t-repeat="person in dept.people" t-key="person.id">\\n    {{ person.name }}\\n  </div>\\n</section>`,
       slots: `<app-window>\\n  <template t-slot="title">{{ guest }} 的工作台</template>\\n  默认插槽\\n</app-window>`,
       bind: `<input t-model="form.email" />\\n<button t-bind:disabled="!canSend" t-on:click="send()">提交</button>`,
-      sfc: `<template>\\n  <p>{{ guest }}</p>\\n</template>\\n<script>\\nexport default { data: () => ({ guest: "" }) }\\n</` + `script>`,
+      sfc: `<template>\\n  <p>{{ guest }}</p>\\n</template>\\n<script>\\nimport { setup } from "tee"\\nexport default setup((c) => { c.guest = "" })\\n</` + `script>`,
     },
   }),
   computed: {

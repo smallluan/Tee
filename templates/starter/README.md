@@ -9,7 +9,7 @@ npm run dev
 
 ## 文件
 
-- `src/App.tee` — 模板 / weave 脚本 / Less（scoped）
+- `src/App.tee` — 模板 / setup 脚本 / Less（scoped）
 - `src/main.ts` — `Tee.create`
 - `.vscode/settings.json` — 把 `*.tee` 当成 HTML，并加载 Tee 指令补全
 

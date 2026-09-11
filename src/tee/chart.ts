@@ -1,121 +1,183 @@
 import {
   SCOPE_HOST,
-  defineAct,
-  defineDerived,
-  defineTrail,
+  defineComputed,
+  defineMethod,
+  defineWatch,
   type Scope,
 } from "./scope";
 import type { Instance } from "./instance";
 import type { TagDef } from "./types";
 
 /**
- * Tee's composition surface. Not Vue setup(), not React hooks.
+ * Script and template share one reactive object. Composition writes
+ * fields onto that object. Updates patch mapped DOM nodes — nothing
+ * re-renders, and nothing is renamed for the sake of sounding new.
  *
- * A Chart is the named ledger behind the twin maps: slots (data paths),
- * derived slots, trails (non-DOM sites), and acts (named actions).
- * Templates, weaves, and trails all speak those names. There is no `.value`,
- * no `this`, and nothing is re-rendered.
+ * The words are the ones people already know. The contract is not Vue's:
+ * names on `c` are the same names in `{{ }}`. A composable is a function
+ * that writes onto `c` (or returns fields that get written onto `c`).
  */
-export type Chart = ChartApi & Record<string, unknown>;
 
-export type WeaveFn = (c: Chart) => void;
+export type Ctx = CtxApi & Record<string, unknown>;
 
-export interface WeaveDef extends Omit<TagDef, "setup"> {
-  install: WeaveFn;
+const stack: Ctx[] = [];
+
+const CTX_KEYS = new Set(["scope", "host"]);
+
+export interface Ref<T> {
+  value: T;
 }
 
-const API_KEYS = new Set([
-  "scope",
-  "host",
-  "hold",
-  "derive",
-  "trail",
-  "act",
-  "pin",
-  "unpin",
-  "weave",
-  "slot",
-]);
+type RefBox<T> = Ref<T> & { __tee: "ref" };
+type ComputedBox<T> = Ref<T> & { __tee: "computed"; get: () => T };
 
-export class ChartApi {
+export function ref<T>(value: T): Ref<T> {
+  return { __tee: "ref", value } as RefBox<T>;
+}
+
+export function computed<T>(get: () => T): Ref<T> {
+  const box: ComputedBox<T> = {
+    __tee: "computed",
+    get,
+    get value() {
+      return get();
+    },
+    set value(_) {
+      /* derived */
+    },
+  };
+  return box;
+}
+
+export interface WatchOptions {
+  immediate?: boolean;
+}
+
+export function watch(effect: () => void): () => void;
+export function watch<T>(
+  source: () => T,
+  cb: (next: T, prev: T | undefined) => void,
+  options?: WatchOptions,
+): () => void;
+export function watch(
+  source: string,
+  cb: (next: unknown, prev: unknown | undefined) => void,
+  options?: WatchOptions,
+): () => void;
+export function watch(
+  source: (() => unknown) | string | Ref<unknown>,
+  cb?: (next: unknown, prev: unknown | undefined) => void,
+  options?: WatchOptions,
+): () => void {
+  const c = current();
+  if (!cb) {
+    return defineWatch(c.host, "effect", () => {
+      (source as () => void)();
+    });
+  }
+  let prev: unknown;
+  let primed = false;
+  return defineWatch(c.host, "watch", () => {
+    const next = readSource(c, source);
+    if (!primed) {
+      primed = true;
+      prev = next;
+      if (options?.immediate) cb(next, undefined);
+      return;
+    }
+    if (!Object.is(next, prev)) cb(next, prev);
+    prev = next;
+  });
+}
+
+export function watchEffect(effect: () => void): () => void {
+  return watch(effect);
+}
+
+export function onMounted(fn: () => void): void {
+  const c = current();
+  c.host.hooks.mounted = chain(c.host.hooks.mounted, fn);
+}
+
+export function onUnmounted(fn: () => void): void {
+  const c = current();
+  c.host.hooks.unmounted = chain(c.host.hooks.unmounted, fn);
+}
+
+export function current(): Ctx {
+  const c = stack[stack.length - 1];
+  if (!c) throw new Error("computed / watch / onMounted must run inside setup()");
+  return c;
+}
+
+class CtxApi {
   constructor(
     readonly scope: Scope,
     readonly host: Instance,
   ) {}
-
-  /** Write fields into the ledger. Same names the template will read. */
-  hold(values: Record<string, unknown>): Chart {
-    for (const [name, value] of Object.entries(values)) this.scope[name] = value;
-    return this as unknown as Chart;
-  }
-
-  /** S0 derived slot. Recomputes when recorded fields move; equal values cut downstream. */
-  derive(name: string, read: (c: Chart) => unknown): Chart {
-    const self = this as unknown as Chart;
-    defineDerived(this.host, name, () => read(self));
-    return self;
-  }
-
-  /** A site with no Node. It follows whatever slots it reads. Rank S3. */
-  trail(label: string, run: (c: Chart) => void): Chart {
-    const self = this as unknown as Chart;
-    defineTrail(this.host, label, () => run(self));
-    return self;
-  }
-
-  /** Named action. Templates fire it with `t-on:click="name"`. */
-  act(name: string, fn: (c: Chart, ...args: unknown[]) => unknown): Chart {
-    const self = this as unknown as Chart;
-    defineAct(this.host, name, (...args: unknown[]) => fn(self, ...args));
-    return self;
-  }
-
-  /** Sites are in the map and the real DOM is attached. */
-  pin(fn: (c: Chart) => void): Chart {
-    const self = this as unknown as Chart;
-    this.host.hooks.pin = chain(this.host.hooks.pin, () => fn(self));
-    return self;
-  }
-
-  /** Instance is being unlinked: sites die, nodes come off. */
-  unpin(fn: (c: Chart) => void): Chart {
-    const self = this as unknown as Chart;
-    this.host.hooks.unmounted = chain(this.host.hooks.unmounted, () => fn(self));
-    return self;
-  }
-
-  /** Nested weave. It writes into this same ledger. */
-  weave(fn: WeaveFn): Chart {
-    fn(this as unknown as Chart);
-    return this as unknown as Chart;
-  }
-
-  slot(name: string): unknown {
-    return this.scope.$lookup(name);
-  }
 }
 
-export function chartOf(scope: Scope): Chart {
+export function ctxOf(scope: Scope): Ctx {
   const host = SCOPE_HOST.get(scope);
-  if (!host) throw new Error("Tee chart: this scope has no host instance");
-  const api = new ChartApi(scope, host);
+  if (!host) throw new Error("Tee setup() needs a mounted instance");
+  const api = new CtxApi(scope, host);
   return new Proxy(api, {
     get(target, key, receiver) {
       if (typeof key === "symbol") return Reflect.get(target, key, receiver);
-      if (API_KEYS.has(key) || key in ChartApi.prototype) return Reflect.get(target, key, receiver);
+      if (CTX_KEYS.has(key) || key in CtxApi.prototype) return Reflect.get(target, key, receiver);
+      if (key.startsWith("$")) return (scope as unknown as Record<string, unknown>)[key];
       return scope.$lookup(key);
     },
     set(_target, key, value) {
-      if (typeof key === "symbol" || API_KEYS.has(key)) return false;
-      scope.$assign(key, value);
+      if (typeof key === "symbol" || CTX_KEYS.has(key)) return false;
+      bindKey(host, scope, String(key), value);
       return true;
     },
-    has(target, key) {
+    has(_target, key) {
       if (typeof key === "symbol") return false;
-      if (API_KEYS.has(key) || key in ChartApi.prototype) return true;
+      if (CTX_KEYS.has(key)) return true;
       return key in scope;
     },
-  }) as Chart;
+  }) as Ctx;
+}
+
+function readSource(c: Ctx, source: (() => unknown) | string | Ref<unknown>): unknown {
+  if (typeof source === "string") return c.scope.$lookup(source);
+  if (isRef(source) || isComputed(source)) return source.value;
+  return source();
+}
+
+function bindKey(host: Instance, scope: Scope, name: string, value: unknown): void {
+  if (isRef(value)) {
+    scope.$assign(name, value.value);
+    Object.defineProperty(value, "value", {
+      configurable: true,
+      get: () => scope.$lookup(name),
+      set: (next: unknown) => scope.$assign(name, next),
+    });
+    return;
+  }
+  if (isComputed(value)) {
+    defineComputed(host, name, value.get);
+    return;
+  }
+  if (typeof value === "function") {
+    defineMethod(host, name, value as (...args: unknown[]) => unknown);
+    return;
+  }
+  scope.$assign(name, value);
+}
+
+function applyReturn(c: Ctx, values: Record<string, unknown>): void {
+  for (const [name, value] of Object.entries(values)) bindKey(c.host, c.scope, name, value);
+}
+
+function isRef(value: unknown): value is RefBox<unknown> {
+  return Boolean(value && typeof value === "object" && (value as RefBox<unknown>).__tee === "ref");
+}
+
+function isComputed(value: unknown): value is ComputedBox<unknown> {
+  return Boolean(value && typeof value === "object" && (value as ComputedBox<unknown>).__tee === "computed");
 }
 
 function chain(prev: (() => void) | undefined, next: () => void): () => void {
@@ -127,29 +189,30 @@ function chain(prev: (() => void) | undefined, next: () => void): () => void {
     : next;
 }
 
-/** A weave is a function that installs names and sites onto a chart. */
-export function weave(install: WeaveFn): TagDef;
-export function weave(def: WeaveDef): TagDef;
-export function weave(input: WeaveFn | WeaveDef): TagDef {
-  if (typeof input === "function") {
-    return {
-      setup(scope) {
-        input(chartOf(scope as Scope));
-      },
-    };
+export function runSetup(scope: Scope, fn: SetupFn): Ctx {
+  const c = ctxOf(scope);
+  stack.push(c);
+  try {
+    const out = fn(c);
+    if (out && typeof out === "object" && !isRef(out) && !isComputed(out)) {
+      applyReturn(c, out as Record<string, unknown>);
+    }
+    return c;
+  } finally {
+    stack.pop();
   }
-  const { install, ...rest } = input;
-  return {
-    ...rest,
-    setup(scope) {
-      rest.setup?.(scope);
-      install(chartOf(scope as Scope));
-    },
-  };
 }
 
-export function runWeave(scope: Scope, fn: WeaveFn): Chart {
-  const c = chartOf(scope);
-  fn(c);
-  return c;
+export type SetupFn = (c: Ctx) => void | Record<string, unknown>;
+
+export interface SetupDef extends Omit<TagDef, "setup"> {
+  setup: SetupFn;
+}
+
+/** Component entry. `c` is the same object the template reads. */
+export function setup(fn: SetupFn): TagDef;
+export function setup(def: SetupDef): TagDef;
+export function setup(input: SetupFn | SetupDef): TagDef {
+  if (typeof input === "function") return { setup: input };
+  return input;
 }

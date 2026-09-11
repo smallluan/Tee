@@ -3,15 +3,15 @@
 </template>
 
 <script>
-import { weave } from "tee";
+import { setup } from "tee";
 
-export default weave({
+export default setup({
   tag: "mini-counter",
-  install(c) {
-    c.hold({ n: 0 });
-    c.act("bump", () => {
+  setup(c) {
+    c.n = 0;
+    c.bump = () => {
       c.n = Number(c.n) + 1;
-    });
+    };
   },
 });
 </script>

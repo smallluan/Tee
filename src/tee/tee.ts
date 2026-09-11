@@ -1,14 +1,24 @@
 import { mountTemplate, applyInject, applyProvide, type CompileContext } from "./compile";
 import { Engine } from "./engine";
 import { Instance } from "./instance";
-import { runWeave, weave } from "./chart";
+import {
+  computed,
+  current,
+  onMounted,
+  onUnmounted,
+  ref,
+  runSetup,
+  setup,
+  watch,
+  watchEffect,
+} from "./chart";
 import { createRootScope, type Scope } from "./scope";
 import type { MapSnapshot, TagDef, TeeOptions, TeePlugin } from "./types";
 
 const registry = new Map<string, TagDef>();
 let currentApp: TeeApp | null = null;
 
-export const version = "0.7.0";
+export const version = "0.8.0";
 
 export function define(name: string, def: TagDef): TagDef {
   registry.set(name.toLowerCase(), def);
@@ -49,8 +59,7 @@ export class TeeApp {
     this.instance.scope = this.scope;
     applyProvide(this.instance, options.provide, this.scope);
     options.created?.call(this.scope);
-    options.setup?.(this.scope);
-    if (options.weave) runWeave(this.scope, options.weave);
+    if (options.setup) runSetup(this.scope, options.setup);
 
     const host = resolveEl(options.el);
     const html = options.template ?? (options.render ? "" : host.innerHTML);
@@ -69,7 +78,7 @@ export class TeeApp {
     (this.scope as { $el?: Element }).$el = host;
     options.mounted?.call(this.scope);
     options.ready?.(this.scope);
-    this.instance.hooks.pin?.();
+    this.instance.hooks.mounted?.();
     this.instance.hooks.updated = chainHook(this.instance.hooks.updated, () => options.updated?.call(this.scope));
     this.instance.hooks.unmounted = chainHook(this.instance.hooks.unmounted, () => options.unmounted?.call(this.scope));
     this.stopFlush = this.engine.onFlush(() => fireUpdated(this.instance));
@@ -143,5 +152,12 @@ export const Tee = {
   create,
   use,
   nextTick,
-  weave,
+  setup,
+  ref,
+  computed,
+  watch,
+  watchEffect,
+  onMounted,
+  onUnmounted,
+  current,
 };

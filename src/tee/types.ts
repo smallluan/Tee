@@ -60,8 +60,7 @@ export interface TagDef extends LifecycleHooks {
   computed?: ComputedMap;
   watch?: Record<string, WatchSource>;
   methods?: MethodMap;
-  setup?: (scope: Record<string, unknown>) => void;
-  weave?: (c: import("./chart").Chart) => void;
+  setup?: import("./chart").SetupFn;
 }
 
 export interface TeeOptions extends LifecycleHooks {
@@ -75,8 +74,7 @@ export interface TeeOptions extends LifecycleHooks {
   provide?: Record<string, unknown> | ((this: Record<string, unknown>) => Record<string, unknown>);
   inject?: string[] | Record<string, string | { from?: string; default?: unknown }>;
   tags?: Record<string, TagDef>;
-  setup?: (scope: Record<string, unknown>) => void;
-  weave?: (c: import("./chart").Chart) => void;
+  setup?: import("./chart").SetupFn;
   ready?: (scope: Record<string, unknown>) => void;
 }
 

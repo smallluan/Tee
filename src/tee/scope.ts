@@ -77,7 +77,7 @@ export function createRootScope(
 
 export const SCOPE_HOST = new WeakMap<Scope, Instance>();
 
-export function defineDerived(
+export function defineComputed(
   instance: Instance,
   name: string,
   getter: () => unknown,
@@ -88,7 +88,7 @@ export function defineDerived(
   instance.extras[name] = reader;
 }
 
-export function defineAct(
+export function defineMethod(
   instance: Instance,
   name: string,
   fn: (...args: unknown[]) => unknown,
@@ -96,17 +96,17 @@ export function defineAct(
   instance.extras[name] = fn;
 }
 
-export function defineTrail(
+export function defineWatch(
   instance: Instance,
   label: string,
   run: () => void,
-): void {
+): () => void {
   const engine = instance.engine;
   const site: import("./types").Site = {
     id: engine.nextSiteId(),
     kind: "watch",
     node: null,
-    label: `trail ${label}`,
+    label: `watch ${label}`,
     rank: Rank.Watch,
     run: () => {
       if (site.dead) return;
@@ -124,6 +124,10 @@ export function defineTrail(
   };
   instance.sites.push(site);
   site.run();
+  return () => {
+    site.dead = true;
+    engine.maps.unlink(site);
+  };
 }
 
 function bindComputed(

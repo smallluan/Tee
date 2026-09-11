@@ -11,7 +11,7 @@ export class Instance {
   scope: Scope | null = null;
   detached = false;
   extras: Record<string, unknown> = {};
-  hooks: { pin?: () => void; updated?: () => void; unmounted?: () => void } = {};
+  hooks: { mounted?: () => void; updated?: () => void; unmounted?: () => void } = {};
 
   constructor(
     readonly engine: Engine,

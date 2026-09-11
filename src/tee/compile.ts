@@ -5,7 +5,7 @@ import { compileExpr } from "./ir";
 import { Instance } from "./instance";
 import { touchList } from "./observe";
 import { runExpr, runStatement, type Scope, createRootScope } from "./scope";
-import { runWeave } from "./chart";
+import { runSetup } from "./chart";
 import { Rank, rankOf } from "./strata";
 import type { Site, TagDef } from "./types";
 
@@ -448,11 +448,12 @@ function bindTag(host: Element, def: TagDef, parentScope: Scope, ctx: CompileCon
 
   let scope = parentScope;
   const inst = ctx.instance.child();
-  if (def.data || def.computed || def.methods || def.watch) {
+  if (def.data || def.computed || def.methods || def.watch || def.setup) {
     const data = def.data ? def.data() : {};
     scope = createRootScope(ctx.engine, data, def.computed, def.methods, def.watch, inst);
     inst.scope = scope;
-    def.setup?.(scope);
+    def.created?.call(scope);
+    if (def.setup) runSetup(scope, def.setup);
   }
 
   const innerCtx: CompileContext = {
@@ -476,6 +477,8 @@ function bindTag(host: Element, def: TagDef, parentScope: Scope, ctx: CompileCon
   }
 
   host.replaceWith(mount);
+  def.mounted?.call(scope);
+  inst.hooks.mounted?.();
 }
 
 function bindSlot(el: Element, scope: Scope, ctx: CompileContext): void {
@@ -934,8 +937,7 @@ function mountTagNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileCont
   inst.scope = innerScope;
   applyProvide(inst, def.provide, innerScope);
   def.created?.call(innerScope);
-  def.setup?.(innerScope);
-  if (def.weave) runWeave(innerScope, def.weave);
+  if (def.setup) runSetup(innerScope, def.setup);
   for (const name of propNames) {
     const bound = node.attrs.find((attr) => attr.kind === "bind" && attr.name === name);
     if (!bound) continue;
@@ -968,7 +970,7 @@ function mountTagNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileCont
   }
   parent.append(...mount.childNodes);
   def.mounted?.call(innerScope);
-  inst.hooks.pin?.();
+  inst.hooks.mounted?.();
   inst.hooks.updated = chainHook(inst.hooks.updated, () => def.updated?.call(innerScope));
   inst.hooks.unmounted = chainHook(inst.hooks.unmounted, () => def.unmounted?.call(innerScope));
 }
