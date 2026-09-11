@@ -451,11 +451,18 @@ function insertRepeatRange(
 }
 
 function clearRepeatDom(start: Node, end: Node): void {
-  if (!start.parentNode || start.parentNode !== end.parentNode || start.nextSibling === end) return;
-  const range = document.createRange();
-  range.setStartAfter(start);
-  range.setEndBefore(end);
-  range.deleteContents();
+  const parent = start.parentNode;
+  if (!parent || parent !== end.parentNode || start.nextSibling === end) return;
+  if (parent.firstChild === start && parent.lastChild === end) {
+    parent.replaceChildren(start, end);
+    return;
+  }
+  let node = start.nextSibling;
+  while (node && node !== end) {
+    const next = node.nextSibling;
+    parent.removeChild(node);
+    node = next;
+  }
 }
 
 function patchRepeatDom(
