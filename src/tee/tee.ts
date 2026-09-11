@@ -62,6 +62,7 @@ export class TeeApp {
     };
     if (options.render) options.render(ctx, host);
     else mountTemplate(html, host, this.scope, ctx);
+    host.removeAttribute("t-cloak");
     this.el = host;
     (this.scope as { $el?: Element }).$el = host;
     options.mounted?.call(this.scope);

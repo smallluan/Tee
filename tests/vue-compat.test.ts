@@ -150,4 +150,17 @@ describe("Vue-compatible basics", () => {
     host.querySelector("#go")!.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);
   });
+
+  it("removes t-cloak from the mount host after compile", () => {
+    const host = document.createElement("div");
+    host.setAttribute("t-cloak", "");
+    document.body.append(host);
+    Tee.create({
+      el: host,
+      template: `<p id="hi">可见</p>`,
+      data: {},
+    });
+    expect(host.hasAttribute("t-cloak")).toBe(false);
+    expect(host.querySelector("#hi")?.textContent).toBe("可见");
+  });
 });
