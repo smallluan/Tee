@@ -450,6 +450,14 @@ function insertRepeatRange(
   parent.insertBefore(fragment, anchor);
 }
 
+function clearRepeatDom(start: Node, end: Node): void {
+  if (!start.parentNode || start.parentNode !== end.parentNode || start.nextSibling === end) return;
+  const range = document.createRange();
+  range.setStartAfter(start);
+  range.setEndBefore(end);
+  range.deleteContents();
+}
+
 function patchRepeatDom(
   end: Node,
   ordered: Array<{ nodes: Node[] }>,
@@ -463,6 +471,33 @@ function patchRepeatDom(
     const frag = document.createDocumentFragment();
     for (const row of ordered) for (const live of row.nodes) frag.appendChild(live);
     parent.insertBefore(frag, end);
+    return;
+  }
+
+  let appendOnly = reused < ordered.length;
+  for (let i = 0; appendOnly && i < ordered.length; i++) {
+    if (oldPositions[i] !== (i < reused ? i : -1)) appendOnly = false;
+  }
+  if (appendOnly) {
+    insertRepeatRange(parent, ordered, reused, ordered.length - 1, end);
+    return;
+  }
+
+  const displaced: number[] = [];
+  for (let i = 0; i < oldPositions.length && displaced.length < 3; i++) {
+    if (oldPositions[i] !== i) displaced.push(i);
+  }
+  if (
+    displaced.length === 2 &&
+    oldPositions[displaced[0]] === displaced[1] &&
+    oldPositions[displaced[1]] === displaced[0]
+  ) {
+    const first = ordered[displaced[0]];
+    const second = ordered[displaced[1]];
+    const firstNode = first.nodes[0];
+    const secondNext = second.nodes.at(-1)?.nextSibling ?? end;
+    insertRepeatRange(parent, ordered, displaced[1], displaced[1], firstNode);
+    insertRepeatRange(parent, ordered, displaced[0], displaced[0], secondNext);
     return;
   }
 
@@ -608,7 +643,7 @@ function createFastRowPlan(
 const TABLE_CONTAINERS = new Set(["table", "thead", "tbody", "tfoot", "tr", "colgroup"]);
 
 function directItemPath(src: string, itemName: string): string[] | null {
-  const match = src.trim().match(/^([A-Za-z_$][\w$]*)(?:\.([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*))$/);
+  const match = src.trim().match(/^([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)$/);
   if (!match || match[1] !== itemName || !match[2]) return null;
   return match[2].split(".");
 }
@@ -853,6 +888,14 @@ function reconcileRepeat(
   end: Node,
   render: RowRenderer,
 ): void {
+  if (items.length === 0 && rows.size) {
+    for (const row of rows.values()) row.inst.destroy();
+    rows.clear();
+    clearRepeatDom(start, end);
+    return;
+  }
+
+  const previousSize = rows.size;
   const used = new Set<string>();
   const ordered: RepeatRow[] = [];
   const oldPositions: number[] = [];
@@ -903,11 +946,13 @@ function reconcileRepeat(
     ordered.push(row);
   }
 
+  const replaceAll = previousSize > 0 && created && reused === 0;
+  if (replaceAll) clearRepeatDom(start, end);
   for (const [key, row] of rows) {
     if (used.has(key)) continue;
     removed = true;
     row.inst.destroy();
-    for (const live of row.nodes) live.parentNode?.removeChild(live);
+    if (!replaceAll) for (const live of row.nodes) live.parentNode?.removeChild(live);
     rows.delete(key);
   }
 

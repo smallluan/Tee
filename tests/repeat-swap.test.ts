@@ -194,4 +194,17 @@ describe("keyed t-repeat", () => {
     expect(host.querySelectorAll("p")[0]).toBe(before);
     expect(before.textContent).toBe("next-0");
   });
+
+  it("falls back to tracked expressions for nullable nested item paths", async () => {
+    const { app, host } = mount({
+      template: `<p t-repeat="item in items" t-key="item.id">{{ item.user.name }}</p>`,
+      data: { items: [{ id: 1, user: null }] },
+    });
+    expect(host.querySelector("p")?.textContent).toBe("");
+
+    (app.data.items as Array<{ id: number; user: { name: string } | null }>)[0].user = { name: "Ada" };
+    await tick(app);
+
+    expect(host.querySelector("p")?.textContent).toBe("Ada");
+  });
 });
