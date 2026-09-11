@@ -65,7 +65,7 @@ export default {
       this.selected = null;
     },
     add() {
-      this.rows = this.rows.concat(buildData(1000));
+      this.rows.push(...buildData(1000));
     },
     update() {
       const rows = this.rows;
@@ -74,11 +74,12 @@ export default {
       }
     },
     clear() {
-      this.rows = [];
+      this.rows.length = 0;
       this.selected = null;
     },
     remove(id) {
-      this.rows = this.rows.filter((row) => row.id !== id);
+      const index = this.rows.findIndex((row) => row.id === id);
+      if (index >= 0) this.rows.splice(index, 1);
     },
     swapRows() {
       const rows = this.rows;
