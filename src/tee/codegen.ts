@@ -1,4 +1,4 @@
-import { attrValue, isVoidTag, staticAttrs, type ElNode, type TmplNode } from "./html.ts";
+import { attrValue, isVoidTag, staticAttrs, type ElNode, type TmplNode } from "./html";
 
 /**
  * Build-time factory codegen: native HTML becomes `document.createElement`

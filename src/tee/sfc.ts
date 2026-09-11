@@ -1,5 +1,5 @@
-import { generateRenderBody } from "./codegen.ts";
-import { parseHTML } from "./html.ts";
+import { generateRenderBody } from "./codegen";
+import { parseHTML } from "./html";
 
 export interface SFCStyleBlock {
   content: string;

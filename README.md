@@ -242,4 +242,4 @@ editor/
 
 公开入口：`Tee.create`、`Tee.define`、`Tee.setup`、`Tee.nextTick`、`Tee.version`，以及 `setup` / `computed` / `watch` / `onMounted` / `ref`。
 
-npm 包：`tee-framework`、`create-tee`。
+npm 包：`tee-framework`、`create-tee`。发布到 npm 的是 `dist/` 里的 JavaScript（Node 加载 `vite.config.ts` 时不会给 `node_modules` 里的 `.ts` 剥类型）。
