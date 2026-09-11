@@ -54,7 +54,6 @@ export class Instance {
     this.childSet = null;
     for (const site of this.sites) {
       site.dead = true;
-      site.dispose?.();
       this.engine.maps.unlink(site);
     }
     this.sites.length = 0;

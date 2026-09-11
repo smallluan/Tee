@@ -21,7 +21,6 @@ export interface Site {
   debugLabel?: string;
   queued?: boolean;
   dead?: boolean;
-  dispose?: () => void;
   last?: unknown;
   depIds?: number[];
   seen?: number[];

@@ -268,7 +268,6 @@ const DELEGATED_KEYS = new Map<string, symbol>();
 const DELEGATED_DOCUMENTS = new WeakMap<Document, Set<string>>();
 const DELEGATED_ROW_ROOT = Symbol("tee:row-root");
 const DELEGATED_ROW_SCOPE = Symbol("tee:row-scope");
-const DIRECT_ROW_SITE = Symbol("tee:direct-row-site");
 
 function runDelegatedBinding(
   el: Element,
@@ -735,12 +734,12 @@ function directBindingProp(binding: FastRowBinding, scope: Scope): string | null
 
 function addSingleDirectRowSite(
   engine: Engine,
-  instance: Instance | null,
+  instance: Instance,
   root: Element,
   binding: FastRowBinding,
   node: Node,
   scope: Scope,
-): Site {
+): void {
   let value: unknown;
   let initialized = false;
   const site: Site = {
@@ -768,9 +767,8 @@ function addSingleDirectRowSite(
       initialized = true;
     },
   };
-  instance?.sites.push(site);
+  instance.sites.push(site);
   site.run();
-  return site;
 }
 
 function addDirectRowSite(
@@ -817,8 +815,7 @@ function addDirectRowSite(
 type RowRenderer = ((parent: Node, scope: Scope, ctx: CompileContext) => void) & {
   fastScope?: boolean;
   usesIndex?: boolean;
-  singleDirect?: boolean;
-  create?: (scope: Scope, ctx: CompileContext, instance: Instance | null) => Element;
+  create?: (scope: Scope, ctx: CompileContext, instance: Instance) => Element;
 };
 
 function fastRowRenderer(
@@ -830,15 +827,13 @@ function fastRowRenderer(
 ): RowRenderer {
   let cachedScopeId: string | undefined;
   let cached: FastRowPlan | undefined;
-  let render!: RowRenderer;
-  const create = (scope: Scope, ctx: CompileContext, instance: Instance | null): Element => {
+  const create = (scope: Scope, ctx: CompileContext, instance: Instance): Element => {
     if (!cached || cachedScopeId !== ctx.scopeId) {
       cachedScopeId = ctx.scopeId;
       cached = createFastRowPlan(node, ctx.scopeId, keyedClassSrc, keySrc, itemName);
     }
     const root = cached.root.cloneNode(true) as Element;
     const reactiveBindings = cached.reactiveBindings;
-    render.singleDirect = reactiveBindings.length === 1 && reactiveBindings[0].directPath != null;
     if (cached.events.length) {
       (root as Element & { [DELEGATED_ROW_SCOPE]: Scope })[DELEGATED_ROW_SCOPE] = scope;
     }
@@ -852,7 +847,7 @@ function fastRowRenderer(
     }
 
     if (reactiveBindings.length === 1 && reactiveBindings[0].directPath) {
-      const site = addSingleDirectRowSite(
+      addSingleDirectRowSite(
         ctx.engine,
         instance,
         root,
@@ -860,9 +855,7 @@ function fastRowRenderer(
         nodeAtPath(root, reactiveBindings[0].path),
         scope,
       );
-      (root as Element & { [DIRECT_ROW_SITE]: Site })[DIRECT_ROW_SITE] = site;
     } else if (reactiveBindings.length) {
-      if (!instance) throw new Error("Tee fast row owner is required for grouped bindings");
       const bindingNodes = reactiveBindings.map((binding) => nodeAtPath(root, binding.path));
       if (reactiveBindings.every((binding) => binding.directPath)) {
         addDirectRowSite(ctx.engine, instance, root, reactiveBindings, bindingNodes, scope);
@@ -911,7 +904,7 @@ function fastRowRenderer(
     }
     return root;
   };
-  render = ((parent: Node, scope: Scope, ctx: CompileContext) => {
+  const render = ((parent: Node, scope: Scope, ctx: CompileContext) => {
     const root = create(scope, ctx, ctx.instance);
     parent.appendChild(root);
   }) as RowRenderer;
@@ -985,8 +978,7 @@ function repeatRowElement(row: RepeatRow | undefined): Element | null {
 
 type RepeatRow = {
   key: string;
-  inst: Instance | null;
-  site: Site | null;
+  inst: Instance;
   nodes: Node[];
   scope: Scope;
   item: unknown;
@@ -1002,38 +994,17 @@ function createRepeatRow(
   ctx: CompileContext,
   render: RowRenderer,
 ): RepeatRow {
-  const inst = render.singleDirect ? null : ctx.instance.child(Boolean(render.fastScope));
+  const inst = ctx.instance.child(Boolean(render.fastScope));
   const liveScope = render.fastScope
-    ? createFastRepeatScope(scope, parsed.item, parsed.index, item, index, inst ?? ctx.instance)
-    : createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst!);
+    ? createFastRepeatScope(scope, parsed.item, parsed.index, item, index, inst)
+    : createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst);
   if (render.create) {
     const root = render.create(liveScope, ctx, inst);
-    const site =
-      inst == null
-        ? ((root as Element & { [DIRECT_ROW_SITE]?: Site })[DIRECT_ROW_SITE] ?? null)
-        : null;
-    return { key, inst, site, nodes: [root], scope: liveScope, item, index };
+    return { key, inst, nodes: [root], scope: liveScope, item, index };
   }
   const holder = document.createDocumentFragment();
-  render(holder, liveScope, { ...ctx, instance: inst! });
-  return { key, inst, site: null, nodes: [...holder.childNodes], scope: liveScope, item, index };
-}
-
-function forEachRepeatSite(row: RepeatRow, visit: (site: Site) => void): void {
-  if (row.site) visit(row.site);
-  else if (row.inst) for (const site of row.inst.sites) visit(site);
-}
-
-function destroyRepeatRow(row: RepeatRow, engine: Engine): void {
-  if (row.inst) {
-    row.inst.destroy();
-    return;
-  }
-  if (!row.site) return;
-  row.site.dead = true;
-  row.site.dispose?.();
-  engine.maps.unlink(row.site);
-  row.site = null;
+  render(holder, liveScope, { ...ctx, instance: inst });
+  return { key, inst, nodes: [...holder.childNodes], scope: liveScope, item, index };
 }
 
 function updateRepeatIndex(
@@ -1047,10 +1018,10 @@ function updateRepeatIndex(
   row.index = index;
   row.scope[parsed.index] = index;
   if (render.usesIndex === false) return;
-  forEachRepeatSite(row, (site) => {
+  for (const site of row.inst.sites) {
     site.linked = false;
     ctx.engine.mark(site);
-  });
+  }
 }
 
 function patchRepeatSwap(end: Node, ordered: RepeatRow[], firstIndex: number, secondIndex: number): void {
@@ -1122,7 +1093,7 @@ function reconcileSimpleRepeatMutation(
     const ordered = previous.slice();
     const removed = ordered.splice(index, removedCount);
     for (const row of removed) {
-      destroyRepeatRow(row, ctx.engine);
+      row.inst.destroy();
       for (const node of row.nodes) node.parentNode?.removeChild(node);
       rows.delete(row.key);
     }
@@ -1169,7 +1140,7 @@ function reconcileRepeat(
   render: RowRenderer,
 ): RepeatRow[] {
   if (items.length === 0 && rows.size) {
-    for (const row of rows.values()) destroyRepeatRow(row, ctx.engine);
+    for (const row of rows.values()) row.inst.destroy();
     rows.clear();
     clearRepeatDom(start, end);
     return [];
@@ -1224,10 +1195,10 @@ function reconcileRepeat(
         if (render.usesIndex !== false) localsChanged = true;
       }
       if (localsChanged) {
-        forEachRepeatSite(row, (site) => {
+        for (const site of row.inst.sites) {
           site.linked = false;
           ctx.engine.mark(site);
-        });
+        }
       }
     }
     ordered.push(row);
@@ -1238,7 +1209,7 @@ function reconcileRepeat(
   for (const [key, row] of rows) {
     if (used.has(key)) continue;
     removed = true;
-    destroyRepeatRow(row, ctx.engine);
+    row.inst.destroy();
     if (!replaceAll) for (const live of row.nodes) live.parentNode?.removeChild(live);
     rows.delete(key);
   }
@@ -1370,14 +1341,7 @@ function bindSlot(el: Element, scope: Scope, ctx: CompileContext): void {
 
 function addSite(
   ctx: CompileContext,
-  init: {
-    kind: Site["kind"];
-    node: Node | null;
-    label: string;
-    rank?: number;
-    dispose?: () => void;
-    run: (this: Site) => void;
-  },
+  init: { kind: Site["kind"]; node: Node | null; label: string; rank?: number; run: (this: Site) => void },
 ): Site {
   const site: Site = {
     id: ctx.engine.nextSiteId(),
@@ -1385,7 +1349,6 @@ function addSite(
     node: init.node,
     label: init.label,
     rank: init.rank ?? rankOf(init.kind, false),
-    dispose: init.dispose,
     run: () => undefined,
   };
   site.run = init.run.bind(site);
@@ -1729,13 +1692,6 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
     node: start,
     label: `t-repeat ${stmt}`,
     rank: Rank.Structure,
-    dispose() {
-      for (const row of rows.values()) {
-        if (!row.inst) destroyRepeatRow(row, ctx.engine);
-      }
-      rows.clear();
-      orderedRows = [];
-    },
     run() {
       applyReactive(this, ctx, scope, parsed.list, (list) => {
         orderedRows = reconcileRepeat(
