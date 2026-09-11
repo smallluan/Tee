@@ -682,7 +682,13 @@ function nodeAtPath(root: Node, path: number[]): Node {
 function readFastBinding(binding: FastRowBinding, scope: Scope): unknown {
   if (binding.directPath) {
     let value = scope.$lookup(binding.directRoot!);
-    for (const part of binding.directPath) value = (value as Record<string, unknown> | null)?.[part];
+    for (const part of binding.directPath) {
+      const raw =
+        value && typeof value === "object"
+          ? ((value as { __teeRaw?: Record<string, unknown> }).__teeRaw ?? value)
+          : value;
+      value = (raw as Record<string, unknown> | null)?.[part];
+    }
     return value;
   }
   if (binding.plan.run) return binding.plan.run((name) => scope.$lookup(name));
@@ -1430,7 +1436,11 @@ function keyFor(
     let cur: unknown = item;
     for (const part of trimmed.slice(prefix.length).split(".")) {
       if (cur == null) return String(index);
-      cur = (cur as Record<string, unknown>)[part];
+      const raw =
+        typeof cur === "object"
+          ? ((cur as { __teeRaw?: Record<string, unknown> }).__teeRaw ?? cur)
+          : cur;
+      cur = (raw as Record<string, unknown>)[part];
     }
     return String(cur);
   }
