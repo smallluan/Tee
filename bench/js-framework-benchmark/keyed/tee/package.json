@@ -1,0 +1,22 @@
+{
+  "name": "js-framework-benchmark-tee",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "js-framework-benchmark": {
+    "frameworkVersionFromPackage": "tee-framework",
+    "frameworkHomeURL": "https://origin.cursor.com/git/sui-tan/tee",
+    "customURL": "/dist",
+    "language": "JavaScript"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build-prod": "vite build"
+  },
+  "dependencies": {
+    "tee-framework": "file:../../../../"
+  },
+  "devDependencies": {
+    "vite": "^8.3.0"
+  }
+}
