@@ -1,112 +1,13 @@
-import { attrValue, isVoidTag, staticAttrs, type ElNode, type TmplNode } from "./html";
+import { attrValue, isAotNative, isNativeTag, isVoidTag, staticAttrs, type ElNode, type TmplNode } from "./html";
+import { parseRepeat } from "./expr";
+import { buildRowSpec, isFastRowTree } from "./row-spec";
 
 /**
  * Build-time factory codegen: native HTML becomes `document.createElement`
  * plus helper calls. Structural directives and custom tags fall back to the
- * runtime walker with a compact node literal.
+ * runtime walker with a compact node literal. Native keyed repeats emit a
+ * reusable row factory that still links through TwinMap.
  */
-const NATIVE = new Set([
-  "a",
-  "abbr",
-  "address",
-  "area",
-  "article",
-  "aside",
-  "audio",
-  "b",
-  "bdi",
-  "bdo",
-  "blockquote",
-  "br",
-  "button",
-  "canvas",
-  "caption",
-  "cite",
-  "code",
-  "col",
-  "colgroup",
-  "data",
-  "datalist",
-  "dd",
-  "del",
-  "details",
-  "dfn",
-  "dialog",
-  "div",
-  "dl",
-  "dt",
-  "em",
-  "embed",
-  "fieldset",
-  "figcaption",
-  "figure",
-  "footer",
-  "form",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "header",
-  "hgroup",
-  "hr",
-  "i",
-  "iframe",
-  "img",
-  "input",
-  "ins",
-  "kbd",
-  "label",
-  "legend",
-  "li",
-  "main",
-  "map",
-  "mark",
-  "menu",
-  "meter",
-  "nav",
-  "noscript",
-  "object",
-  "ol",
-  "optgroup",
-  "option",
-  "output",
-  "p",
-  "picture",
-  "pre",
-  "progress",
-  "q",
-  "rp",
-  "rt",
-  "ruby",
-  "s",
-  "samp",
-  "section",
-  "select",
-  "small",
-  "source",
-  "span",
-  "strong",
-  "sub",
-  "summary",
-  "sup",
-  "table",
-  "tbody",
-  "td",
-  "textarea",
-  "tfoot",
-  "th",
-  "thead",
-  "time",
-  "tr",
-  "track",
-  "u",
-  "ul",
-  "var",
-  "video",
-  "wbr",
-]);
 
 export function generateRenderBody(nodes: TmplNode[]): string {
   const gen = new Gen();
@@ -166,6 +67,10 @@ class Gen {
       this.line(`__rt.live(${parent}, s, ctx, ${JSON.stringify(node.src)});`);
       return;
     }
+    if (attrValue(node.attrs, "repeat") != null) {
+      this.emitRepeat(node, parent);
+      return;
+    }
     if (!isAotNative(node)) {
       this.line(`__rt.mount(${parent}, s, ctx, ${JSON.stringify(node)});`);
       return;
@@ -203,31 +108,40 @@ class Gen {
     this.line(`__rt.cloak(${el});`);
     this.line(`${parent}.appendChild(${el});`);
   }
+
+  emitRepeat(node: ElNode, parent: string): void {
+    const stmt = attrValue(node.attrs, "repeat") ?? "";
+    const keySrc = attrValue(node.attrs, "key") ?? null;
+    const stripped: ElNode = {
+      ...node,
+      attrs: node.attrs.filter((attr) => attr.kind !== "repeat" && attr.kind !== "key"),
+    };
+    if (!isFastRowTree(stripped)) {
+      this.line(`__rt.mount(${parent}, s, ctx, ${JSON.stringify(node)});`);
+      return;
+    }
+    const parsed = parseRepeat(stmt);
+    const spec = buildRowSpec(stripped, parsed.item, parsed.index, keySrc);
+    const factory = this.id();
+    this.line(`const ${factory} = __rt.rowFactory(${JSON.stringify(spec)});`);
+    this.line(
+      `__rt.repeat(${parent}, s, ctx, ${JSON.stringify({
+        list: parsed.list,
+        item: parsed.item,
+        index: parsed.index,
+        key: keySrc,
+        classPlan: spec.classPlan,
+      })}, ${factory});`,
+    );
+  }
 }
 
-export function isAotNative(node: ElNode): boolean {
-  if (!NATIVE.has(node.tag)) return false;
-  for (const attr of node.attrs) {
-    if (
-      attr.kind === "show" ||
-      attr.kind === "repeat" ||
-      attr.kind === "pre" ||
-      attr.kind === "once" ||
-      attr.kind === "if" ||
-      attr.kind === "elif" ||
-      attr.kind === "else" ||
-      attr.kind === "slot"
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
+export { isAotNative };
 
 function isStaticTree(node: TmplNode): boolean {
   if (node.t === "live") return false;
   if (node.t === "text") return true;
-  if (!NATIVE.has(node.tag) || node.tag === "slot") return false;
+  if (!isNativeTag(node.tag) || node.tag === "slot") return false;
   for (const attr of node.attrs) if (attr.kind !== "static") return false;
   return node.children.every(isStaticTree);
 }

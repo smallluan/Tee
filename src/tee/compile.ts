@@ -1,8 +1,17 @@
 import { display, isBooleanAttr, parseRepeat, splitInterpolation, writeText } from "./expr";
 import type { Engine } from "./engine";
-import { attrValue, isVoidTag, parseHTML, staticAttrs, type ElNode, type TmplNode } from "./html";
-import { compileExpr, compileStmt } from "./ir";
-import { generateRenderBody, isAotNative } from "./codegen";
+import { attrValue, isAotNative, isVoidTag, parseHTML, staticAttrs, type ElNode, type TmplNode } from "./html";
+import { compileExpr } from "./ir";
+import { generateRenderBody } from "./codegen";
+import {
+  buildRowSpec,
+  compileRowPath,
+  isFastRowTree,
+  keyedClassPlan,
+  materializeRowSkeleton,
+  type KeyedClassPlan,
+  type RowSpec,
+} from "./row-spec";
 import { Instance } from "./instance";
 import { touchList } from "./observe";
 import {
@@ -552,6 +561,7 @@ type FastRowBinding = {
   mode: "reactive" | "once" | "skip";
   directPath: string[] | null;
   directRoot: string | null;
+  nodeOf: (root: Node) => Node;
 };
 
 type FastRowEvent = {
@@ -560,124 +570,6 @@ type FastRowEvent = {
   src: string;
   mods: string[];
 };
-
-type FastRowRef = { path: number[]; name: string };
-
-type FastRowPlan = {
-  root: Element;
-  bindings: FastRowBinding[];
-  reactiveBindings: FastRowBinding[];
-  events: FastRowEvent[];
-  refs: FastRowRef[];
-};
-
-function isFastRowTree(node: TmplNode): boolean {
-  if (node.t === "live") return compileExpr(node.src).run != null;
-  if (node.t === "text") return true;
-  if (!isAotNative(node)) return false;
-  for (const attr of node.attrs) {
-    if (attr.kind !== "static" && attr.kind !== "on" && attr.kind !== "bind" && attr.kind !== "ref") {
-      return false;
-    }
-    if (attr.kind === "bind" && !compileExpr(attr.value).run) return false;
-    if (attr.kind === "on" && compileStmt(attr.value).t === "raw") return false;
-  }
-  return node.children.every(isFastRowTree);
-}
-
-function createFastRowPlan(
-  node: ElNode,
-  scopeId: string | undefined,
-  keyedClassSrc: string | null,
-  keySrc: string | null,
-  itemName: string,
-): FastRowPlan {
-  const bindings: FastRowBinding[] = [];
-  const events: FastRowEvent[] = [];
-  const refs: FastRowRef[] = [];
-
-  const build = (current: TmplNode, path: number[]): Node => {
-    if (current.t === "text") return document.createTextNode(current.value);
-    if (current.t === "live") {
-      bindings.push({
-        path,
-        src: current.src,
-        name: null,
-        base: "",
-        plan: compileExpr(current.src),
-        mode: current.src === keySrc ? "once" : "reactive",
-        directPath: directItemPath(current.src, itemName),
-        directRoot: directItemPath(current.src, itemName) ? itemName : null,
-      });
-      return document.createTextNode("");
-    }
-
-    const el = document.createElement(current.tag);
-    if (scopeId) el.setAttribute(scopeId, "");
-    for (const attr of staticAttrs(current.attrs)) {
-      if (attr.name !== "t-cloak") el.setAttribute(attr.name, attr.value);
-    }
-    for (const attr of current.attrs) {
-      if (attr.kind === "on") {
-        events.push({ path, event: attr.event, src: attr.value, mods: attr.mods });
-      } else if (attr.kind === "bind") {
-        bindings.push({
-          path,
-          src: attr.value,
-          name: attr.name,
-          base: attr.name === "class" ? el.getAttribute("class") || "" : "",
-          plan: compileExpr(attr.value),
-          mode:
-            attr.name === "class" && path.length === 0 && attr.value === keyedClassSrc
-              ? "skip"
-              : attr.value === keySrc
-                ? "once"
-                : "reactive",
-          directPath: directItemPath(attr.value, itemName),
-          directRoot: directItemPath(attr.value, itemName) ? itemName : null,
-        });
-      } else if (attr.kind === "ref") {
-        refs.push({ path, name: attr.value });
-      }
-    }
-    let childIndex = 0;
-    for (let i = 0; i < current.children.length; i++) {
-      const child = current.children[i];
-      if (
-        child.t === "text" &&
-        !child.value.trim() &&
-        (TABLE_CONTAINERS.has(current.tag) || i === 0 || i === current.children.length - 1)
-      ) {
-        continue;
-      }
-      el.appendChild(build(child, [...path, childIndex]));
-      childIndex += 1;
-    }
-    return el;
-  };
-
-  return {
-    root: build(node, []) as Element,
-    bindings,
-    reactiveBindings: bindings.filter((binding) => binding.mode === "reactive"),
-    events,
-    refs,
-  };
-}
-
-const TABLE_CONTAINERS = new Set(["table", "thead", "tbody", "tfoot", "tr", "colgroup"]);
-
-function directItemPath(src: string, itemName: string): string[] | null {
-  const match = src.trim().match(/^([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)$/);
-  if (!match || match[1] !== itemName || !match[2]) return null;
-  return match[2].split(".");
-}
-
-function nodeAtPath(root: Node, path: number[]): Node {
-  let node = root;
-  for (const index of path) node = node.childNodes[index];
-  return node;
-}
 
 function readFastBinding(binding: FastRowBinding, scope: Scope): unknown {
   if (binding.directPath) {
@@ -830,35 +722,53 @@ function addDirectRowSite(
 type RowRenderer = ((parent: Node, scope: Scope, ctx: CompileContext) => void) & {
   fastScope?: boolean;
   usesIndex?: boolean;
+  classPlan?: ReturnType<typeof keyedClassPlan>;
   create?: (scope: Scope, ctx: CompileContext, instance: Instance) => Element;
 };
 
-function fastRowRenderer(
-  node: ElNode,
-  keyedClassSrc: string | null,
-  keySrc: string | null,
-  itemName: string,
-  indexName: string,
-): RowRenderer {
-  let cachedScopeId: string | undefined;
-  let cached: FastRowPlan | undefined;
+function rowTemplate(spec: RowSpec, scopeId?: string): () => Element {
+  let proto: Element | undefined;
+  return () => {
+    if (!proto) proto = materializeRowSkeleton(spec.root, scopeId) as Element;
+    return proto.cloneNode(true) as Element;
+  };
+}
+
+function createFastRowRendererFromSpec(spec: RowSpec): RowRenderer {
+  const clone = rowTemplate(spec);
+  let scopedClone: (() => Element) | undefined;
+  let scopedId: string | undefined;
+  const bindings: FastRowBinding[] = spec.bindings.map((binding) => ({
+    ...binding,
+    plan: compileExpr(binding.src),
+    nodeOf: compileRowPath(binding.path),
+  }));
+  const reactiveBindings = bindings.filter((binding) => binding.mode === "reactive");
+  const onceBindings = bindings.filter((binding) => binding.mode === "once");
+  const eventGets = spec.events.map((event) => compileRowPath(event.path));
+  const refGets = spec.refs.map((ref) => compileRowPath(ref.path));
+
   const create = (scope: Scope, ctx: CompileContext, instance: Instance): Element => {
-    if (!cached || cachedScopeId !== ctx.scopeId) {
-      cachedScopeId = ctx.scopeId;
-      cached = createFastRowPlan(node, ctx.scopeId, keyedClassSrc, keySrc, itemName);
+    let make = clone;
+    if (ctx.scopeId) {
+      if (ctx.scopeId !== scopedId) {
+        scopedId = ctx.scopeId;
+        scopedClone = rowTemplate(spec, ctx.scopeId);
+      }
+      make = scopedClone ?? clone;
     }
-    const root = cached.root.cloneNode(true) as Element;
-    const reactiveBindings = cached.reactiveBindings;
-    if (cached.events.length) {
+    const root = make();
+    if (spec.events.length) {
       (root as Element & { [DELEGATED_ROW_SCOPE]: Scope })[DELEGATED_ROW_SCOPE] = scope;
     }
-    for (const event of cached.events) {
-      bindFastEvent(nodeAtPath(root, event.path) as Element, event, root, scope);
+    for (let i = 0; i < spec.events.length; i++) {
+      bindFastEvent(eventGets[i](root) as Element, spec.events[i], root, scope);
     }
-    for (const ref of cached.refs) bindRef(nodeAtPath(root, ref.path) as Element, ref.name, scope);
-    for (const binding of cached.bindings) {
-      if (binding.mode !== "once") continue;
-      applyFastBinding(binding, nodeAtPath(root, binding.path), readFastBinding(binding, scope));
+    for (let i = 0; i < spec.refs.length; i++) {
+      bindRef(refGets[i](root) as Element, spec.refs[i].name, scope);
+    }
+    for (const binding of onceBindings) {
+      applyFastBinding(binding, binding.nodeOf(root), readFastBinding(binding, scope));
     }
 
     if (reactiveBindings.length === 1 && reactiveBindings[0].directPath) {
@@ -867,11 +777,11 @@ function fastRowRenderer(
         instance,
         root,
         reactiveBindings[0],
-        nodeAtPath(root, reactiveBindings[0].path),
+        reactiveBindings[0].nodeOf(root),
         scope,
       );
     } else if (reactiveBindings.length) {
-      const bindingNodes = reactiveBindings.map((binding) => nodeAtPath(root, binding.path));
+      const bindingNodes = reactiveBindings.map((binding) => binding.nodeOf(root));
       if (reactiveBindings.every((binding) => binding.directPath)) {
         addDirectRowSite(ctx.engine, instance, root, reactiveBindings, bindingNodes, scope);
       } else {
@@ -920,37 +830,22 @@ function fastRowRenderer(
     return root;
   };
   const render = ((parent: Node, scope: Scope, ctx: CompileContext) => {
-    const root = create(scope, ctx, ctx.instance);
-    parent.appendChild(root);
+    parent.appendChild(create(scope, ctx, ctx.instance));
   }) as RowRenderer;
   render.fastScope = true;
-  render.usesIndex = rowUsesIndex(node, indexName);
+  render.usesIndex = spec.usesIndex;
+  render.classPlan = spec.classPlan;
   render.create = create;
   return render;
 }
 
-function expressionUsesName(src: string, name: string): boolean {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^\\w$])${escaped}($|[^\\w$])`).test(src);
-}
-
-function rowUsesIndex(node: TmplNode, indexName: string): boolean {
-  if (node.t === "text") return false;
-  if (node.t === "live") return expressionUsesName(node.src, indexName);
-  for (const attr of node.attrs) {
-    if (attr.kind === "bind" && expressionUsesName(attr.value, indexName)) return true;
-  }
-  return node.children.some((child) => rowUsesIndex(child, indexName));
-}
-
 function rowRenderer(
   node: ElNode,
-  keyedClassSrc: string | null = null,
   keySrc: string | null = null,
   itemName = "item",
   indexName = "$index",
 ): RowRenderer {
-  if (isFastRowTree(node)) return fastRowRenderer(node, keyedClassSrc, keySrc, itemName, indexName);
+  if (isFastRowTree(node)) return createFastRowRendererFromSpec(buildRowSpec(node, itemName, indexName, keySrc));
   if (isAotNative(node)) {
     const body = generateRenderBody([node]);
     const fn = new Function("__rt", "parent", "s", "ctx", body);
@@ -959,30 +854,6 @@ function rowRenderer(
     };
   }
   return (parent, scope, ctx) => mountNode(node, parent, scope, ctx);
-}
-
-type KeyedClassPlan = {
-  src: string;
-  className: string;
-  selectedSrc: string;
-};
-
-function keyedClassPlan(
-  node: ElNode,
-  itemName: string,
-  keySrc: string | null,
-): KeyedClassPlan | null {
-  if (!keySrc || !keySrc.startsWith(itemName + ".")) return null;
-  const attr = node.attrs.find((candidate) => candidate.kind === "bind" && candidate.name === "class");
-  if (!attr || attr.kind !== "bind") return null;
-  const match = attr.value.match(
-    /^\{\s*([A-Za-z_$][\w$-]*)\s*:\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*===\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\}$/,
-  );
-  if (!match) return null;
-  const [, className, left, right] = match;
-  const selectedSrc = left === keySrc ? right : right === keySrc ? left : null;
-  if (!selectedSrc || selectedSrc === keySrc || selectedSrc.startsWith(itemName + ".")) return null;
-  return { src: attr.value, className, selectedSrc };
 }
 
 function repeatRowElement(row: RepeatRow | undefined): Element | null {
@@ -1239,39 +1110,32 @@ function bindRepeat(el: Element, scope: Scope, ctx: CompileContext): void {
   el.removeAttribute("t-repeat");
   el.removeAttribute("t-key");
   const parsed = parseRepeat(stmt);
-  const template = el.cloneNode(true) as Element;
+  const html = el.outerHTML;
   const start = document.createComment("t-repeat");
   const end = document.createComment("/t-repeat");
   el.replaceWith(start);
   start.parentNode?.insertBefore(end, start.nextSibling);
-  const rows = new Map<string, RepeatRow>();
-  let orderedRows: RepeatRow[] = [];
-
-  addSite(ctx, {
-    kind: "repeat",
-    node: start,
-    label: `t-repeat ${stmt}`,
-    rank: Rank.Structure,
-    run() {
-      applyReactive(this, ctx, scope, parsed.list, (list) => {
-        orderedRows = reconcileRepeat(
-          Array.isArray(list) ? list : [],
-          orderedRows,
-          rows,
-          parsed,
-          keySrc,
-          scope,
-          ctx,
-          start,
-          end,
-          (parent, liveScope, inner) => {
-            const node = template.cloneNode(true) as Element;
-            parent.append(...compileDetached(node, liveScope, inner));
-          },
-        );
-      });
-    },
-  });
+  const ast = parseHTML(html)[0];
+  const render =
+    ast && ast.t === "el"
+      ? rowRenderer(ast, keySrc, parsed.item, parsed.index)
+      : (((parent, liveScope, inner) => {
+          const holder = document.createElement("template");
+          holder.innerHTML = html;
+          const node = holder.content.firstChild;
+          if (node) parent.append(...compileDetached(node, liveScope, inner));
+        }) as RowRenderer);
+  startRepeat(
+    start,
+    end,
+    scope,
+    ctx,
+    parsed,
+    keySrc,
+    render,
+    stmt,
+    render.classPlan ?? (ast && ast.t === "el" ? keyedClassPlan(ast, parsed.item, keySrc) : null),
+  );
 }
 
 function collectFillers(host: Element): Record<string, Node[]> {
@@ -1695,10 +1559,33 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
   const end = document.createComment("/t-repeat");
   parent.appendChild(start);
   parent.appendChild(end);
+  const render = rowRenderer(stripped, keySrc, parsed.item, parsed.index);
+  startRepeat(
+    start,
+    end,
+    scope,
+    ctx,
+    parsed,
+    keySrc,
+    render,
+    stmt,
+    render.classPlan ?? keyedClassPlan(stripped, parsed.item, keySrc),
+  );
+}
+
+function startRepeat(
+  start: Node,
+  end: Node,
+  scope: Scope,
+  ctx: CompileContext,
+  parsed: { item: string; index: string; list: string },
+  keySrc: string | null,
+  render: RowRenderer,
+  stmt: string,
+  classPlan: KeyedClassPlan | null = render.classPlan ?? null,
+): void {
   const rows = new Map<string, RepeatRow>();
   let orderedRows: RepeatRow[] = [];
-  const classPlan = keyedClassPlan(stripped, parsed.item, keySrc);
-  const render = rowRenderer(stripped, classPlan?.src ?? null, keySrc, parsed.item, parsed.index);
   let selectedKey: string | null = null;
   let syncSelectedRow = () => undefined;
 
@@ -1996,5 +1883,36 @@ export const rt = {
   },
   nodes(parent: Node, scope: Scope, ctx: CompileContext, nodes: TmplNode[]) {
     mountAST(nodes, parent, scope, ctx);
+  },
+  rowFactory: createFastRowRendererFromSpec,
+  repeat(
+    parent: Node,
+    scope: Scope,
+    ctx: CompileContext,
+    meta: {
+      list: string;
+      item: string;
+      index: string;
+      key: string | null;
+      classPlan: KeyedClassPlan | null;
+    },
+    factory: RowRenderer,
+  ) {
+    const start = document.createComment("t-repeat");
+    const end = document.createComment("/t-repeat");
+    parent.appendChild(start);
+    parent.appendChild(end);
+    if (meta.classPlan) factory.classPlan = meta.classPlan;
+    startRepeat(
+      start,
+      end,
+      scope,
+      ctx,
+      { item: meta.item, index: meta.index, list: meta.list },
+      meta.key,
+      factory,
+      `${meta.item} in ${meta.list}`,
+      meta.classPlan ?? factory.classPlan ?? null,
+    );
   },
 };

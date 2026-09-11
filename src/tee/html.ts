@@ -44,6 +44,111 @@ const VOID = new Set([
   "wbr",
 ]);
 
+const NATIVE = new Set([
+  "a",
+  "abbr",
+  "address",
+  "area",
+  "article",
+  "aside",
+  "audio",
+  "b",
+  "bdi",
+  "bdo",
+  "blockquote",
+  "br",
+  "button",
+  "canvas",
+  "caption",
+  "cite",
+  "code",
+  "col",
+  "colgroup",
+  "data",
+  "datalist",
+  "dd",
+  "del",
+  "details",
+  "dfn",
+  "dialog",
+  "div",
+  "dl",
+  "dt",
+  "em",
+  "embed",
+  "fieldset",
+  "figcaption",
+  "figure",
+  "footer",
+  "form",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "header",
+  "hgroup",
+  "hr",
+  "i",
+  "iframe",
+  "img",
+  "input",
+  "ins",
+  "kbd",
+  "label",
+  "legend",
+  "li",
+  "main",
+  "map",
+  "mark",
+  "menu",
+  "meter",
+  "nav",
+  "noscript",
+  "object",
+  "ol",
+  "optgroup",
+  "option",
+  "output",
+  "p",
+  "picture",
+  "pre",
+  "progress",
+  "q",
+  "rp",
+  "rt",
+  "ruby",
+  "s",
+  "samp",
+  "section",
+  "select",
+  "small",
+  "source",
+  "span",
+  "strong",
+  "sub",
+  "summary",
+  "sup",
+  "table",
+  "tbody",
+  "td",
+  "textarea",
+  "tfoot",
+  "th",
+  "thead",
+  "time",
+  "tr",
+  "track",
+  "u",
+  "ul",
+  "var",
+  "video",
+  "wbr",
+]);
+
+const STRUCTURAL = new Set(["show", "repeat", "pre", "once", "if", "elif", "else", "slot"]);
+
 export function parseHTML(html: string): TmplNode[] {
   return new HtmlParser(html).parseNodes();
 }
@@ -239,4 +344,17 @@ export function staticAttrs(attrs: TmplAttr[]): Array<{ name: string; value: str
 
 export function isVoidTag(tag: string): boolean {
   return VOID.has(tag);
+}
+
+export function isNativeTag(tag: string): boolean {
+  return NATIVE.has(tag);
+}
+
+/** Native HTML with no structural directives. Custom tags and t-if/t-repeat fall back. */
+export function isAotNative(node: ElNode): boolean {
+  if (!NATIVE.has(node.tag)) return false;
+  for (const attr of node.attrs) {
+    if (STRUCTURAL.has(attr.kind)) return false;
+  }
+  return true;
 }
