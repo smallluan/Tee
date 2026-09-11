@@ -65,7 +65,6 @@ export class Engine {
   }
 
   stale(site: Site): boolean {
-    if (site.depId) return this.lattice.clocks[site.depId] !== site.seenClock;
     const deps = site.depIds;
     const seen = site.seen;
     if (!deps || !seen || deps.length === 0) return true;
@@ -75,18 +74,7 @@ export class Engine {
   }
 
   capture(site: Site): void {
-    const bucket = this.maps.propBucketFor(site);
-    if (typeof bucket === "string") {
-      const id = this.lattice.intern(bucket);
-      site.depId = id;
-      site.seenClock = this.lattice.clocks[id];
-      site.depIds = undefined;
-      site.seen = undefined;
-      return;
-    }
-    site.depId = undefined;
-    site.seenClock = undefined;
-    const props = bucket ?? new Set<PropKey>();
+    const props = this.maps.propsFor(site);
     const depIds = new Array<number>(props.size);
     const seen = new Array<number>(props.size);
     let i = 0;
@@ -101,10 +89,6 @@ export class Engine {
   }
 
   touch(site: Site): void {
-    if (site.depId) {
-      site.seenClock = this.lattice.clocks[site.depId];
-      return;
-    }
     const deps = site.depIds;
     if (!deps) return;
     const seen = site.seen ?? new Array<number>(deps.length);
@@ -178,8 +162,8 @@ export class Engine {
 
   snapshot(): MapSnapshot {
     const reverse: SiteSnapshot[] = [];
-    for (const site of this.maps.reverse.keys()) {
-      reverse.push(describeSite(site, [...this.maps.propsFor(site)], [...this.maps.debugFor(site)]));
+    for (const [site, props] of this.maps.reverse) {
+      reverse.push(describeSite(site, [...props], [...(this.maps.debug.get(site) ?? props)]));
     }
     reverse.sort((a, b) => a.id - b.id);
 
@@ -191,7 +175,7 @@ export class Engine {
         label: prop,
         sites: sites
           .map((site) =>
-            describeSite(site, [...this.maps.propsFor(site)], [...this.maps.debugFor(site)]),
+            describeSite(site, [...this.maps.propsFor(site)], [...(this.maps.debug.get(site) ?? [])]),
           )
           .sort((a, b) => a.id - b.id),
       });
