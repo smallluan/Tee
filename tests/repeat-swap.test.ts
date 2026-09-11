@@ -204,6 +204,29 @@ describe("keyed t-repeat", () => {
     expect(host.querySelector("td")?.childNodes).toHaveLength(1);
   });
 
+  it("keeps direct item writes point-to-point through TwinMap", async () => {
+    const { app, host } = mount({
+      template: `<p t-repeat="item in items" t-key="item.id">{{ item.name }}</p>`,
+      data: {
+        items: [
+          { id: 1, name: "a" },
+          { id: 2, name: "b" },
+          { id: 3, name: "c" },
+        ],
+      },
+    });
+    const before = [...host.querySelectorAll("p")];
+
+    (app.data.items as Array<{ id: number; name: string }>)[1].name = "B";
+    await tick(app);
+
+    expect([...host.querySelectorAll("p")]).toEqual(before);
+    expect(before.map((node) => node.textContent)).toEqual(["a", "B", "c"]);
+    expect(app.stats().mark).toBe(1);
+    expect(app.stats().run).toBe(1);
+    expect(app.stats().patch).toBe(1);
+  });
+
   it("preserves meaningful whitespace between inline children", () => {
     const { host } = mount({
       template:
