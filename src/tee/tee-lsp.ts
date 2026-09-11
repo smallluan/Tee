@@ -265,9 +265,8 @@ export class TeeLanguageProject {
 
   private tsCompletions(fileName: string, offset: number, source: string): TeeCompletion[] {
     const info = this.service.getCompletionsAtPosition(fileName, offset, {
-      includeCompletionsForModuleExports: true,
+      includeCompletionsForModuleExports: false,
       includeCompletionsWithInsertText: true,
-      includePackageJsonAutoImports: "auto",
     });
     const native = (info?.entries ?? []).map((entry) => this.convertTSEntry(fileName, offset, entry));
     if (inTeeNamedImport(source, offset)) {
@@ -293,27 +292,10 @@ export class TeeLanguageProject {
   }
 
   private convertTSEntry(fileName: string, offset: number, entry: ts.CompletionEntry): TeeCompletion {
-    let details: ts.CompletionEntryDetails | undefined;
-    try {
-      details = this.service.getCompletionEntryDetails(
-        fileName,
-        offset,
-        entry.name,
-        undefined,
-        entry.source,
-        undefined,
-        entry.data,
-      );
-    } catch {
-      // Some TypeScript auto-import entries require editor preferences that
-      // are unavailable in a standalone language host. The completion itself
-      // is still valid; omit only the expanded documentation.
-    }
     return {
       name: entry.name,
       kind: tsKind(entry.kind),
-      detail: details ? ts.displayPartsToString(details.displayParts) : undefined,
-      documentation: details ? ts.displayPartsToString(details.documentation) : undefined,
+      detail: entry.sourceDisplay ? ts.displayPartsToString(entry.sourceDisplay) : undefined,
       insertText: entry.insertText,
       snippet: Boolean(entry.isSnippet),
       replaceStart: entry.replacementSpan?.start,

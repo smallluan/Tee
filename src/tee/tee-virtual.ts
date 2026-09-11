@@ -184,6 +184,13 @@ function collectDirectiveExprs(source: string, start: number, tagEnd: number, ou
     const nameStart = i;
     while (i < tagEnd && /[\w.:-]/.test(source[i])) i += 1;
     const name = source.slice(nameStart, i);
+    if (!name) {
+      // `/` in `<input />` (or any punctuation between attributes) must
+      // advance. Without this, every language request on a normal starter
+      // template loops forever before it can return completions.
+      i += 1;
+      continue;
+    }
     while (i < tagEnd && /\s/.test(source[i])) i += 1;
     if (source[i] !== "=") continue;
     i += 1;

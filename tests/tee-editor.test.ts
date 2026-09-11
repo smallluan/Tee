@@ -85,6 +85,14 @@ describe("tee virtual document", () => {
     expect(locateTee(setupSfc, at(setupSfc, "<p ") + 3).kind).toBe("tag");
   });
 
+  it("does not hang on self-closing HTML tags", () => {
+    const source = `<template><input t-model.trim="guest" /></template>`;
+    const template = parseSFCBlocks(source).find((block) => block.tag === "template")!;
+    expect(findTemplateExprs(source, template.contentStart, template.contentEnd)).toEqual([
+      expect.objectContaining({ text: "guest", directive: "t-model.trim" }),
+    ]);
+  });
+
   it("pulls self fields, options data, computed, and methods", () => {
     const setupNames = collectComponentBindings(setupSfc).map((b) => b.name);
     expect(setupNames).toEqual(expect.arrayContaining(["guest", "count", "bump", "label", "$refs", "$emit"]));
