@@ -20,6 +20,8 @@ export interface Site {
   queued?: boolean;
   dead?: boolean;
   last?: unknown;
+  depId?: number;
+  seenClock?: number;
   depIds?: number[];
   seen?: number[];
 }
