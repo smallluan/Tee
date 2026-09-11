@@ -1063,19 +1063,6 @@ function reconcileSimpleRepeatMutation(
 ): RepeatRow[] | null {
   const delta = items.length - previous.length;
   if (delta > 0) {
-    if (previous.length === 0 && rows.size === 0) {
-      const additions = new Array<RepeatRow>(items.length);
-      for (let index = 0; index < items.length; index++) {
-        let key = keyFor(items[index], index, keySrc, parsed.item, parsed.index, scope);
-        while (rows.has(key)) key += "#" + index;
-        const row = createRepeatRow(items[index], index, key, parsed, scope, ctx, render);
-        additions[index] = row;
-        rows.set(key, row);
-      }
-      insertRepeatRange(end.parentNode!, additions, 0, additions.length - 1, end);
-      return additions;
-    }
-
     let index = 0;
     while (index < previous.length && Object.is(items[index], previous[index].item)) index += 1;
     for (let old = index; old < previous.length; old++) {
