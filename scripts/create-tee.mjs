@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,6 +27,12 @@ if (existsSync(dest) && readdirSync(dest).length > 0) {
 
 cpSync(template, dest, { recursive: true });
 
+const vsix = join(root, "editor", "tee-language.vsix");
+if (existsSync(vsix)) {
+  mkdirSync(join(dest, ".vscode"), { recursive: true });
+  cpSync(vsix, join(dest, ".vscode", "tee-language.vsix"));
+}
+
 const pkgPath = join(dest, "package.json");
 const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
 pkg.name =
@@ -46,4 +52,9 @@ console.log(`
     cd ${name}
     npm install
     npm run dev
+
+  .tee files need the Tee extension or they render as plain text.
+  Command Palette → Extensions: Install from VSIX…
+  → ${existsSync(vsix) ? ".vscode/tee-language.vsix" : "node_modules/tee-framework/editor/tee-language.vsix"}
+  then reload. Tab icon should be a gold T, not a generic text file.
 `);

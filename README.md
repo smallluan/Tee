@@ -148,7 +148,7 @@ npm test
 | `.vue` + Less scoped | `.tee` + `lang="less"` scoped |
 | `setup` / `computed` / `watch` / `onMounted` / `ref` | 同名。合同不同：写在 `self` 上的名字就是模板名 |
 
-编辑器材料在 `editor/`：HTML custom data、TextMate 语法、`*.tee` 类型。
+编辑器：安装 `editor/tee-language.vsix`。不装的话 `.tee` 是纯文本。图标是墨色底上的金色 T。
 
 ## `.tee` 单文件组件
 
@@ -195,9 +195,15 @@ Tee.create({ el: "#app", ...App });
 
 ## 编辑器
 
-- 仓库 `.vscode/settings.json`：`*.tee` 关联 HTML，并加载 `editor/tee.html-data.json`
-- `editor/vscode-tee`：TextMate 语法
-- `src/vite-env.d.ts`：`*.tee` 模块类型
+`.tee` **不是** HTML。把 `tee-language.vsix` 放在项目里**不会**自动安装。没装扩展且把语言设成 `tee` 时，VS Code 会当成纯文本（全白）。
+
+1. Command Palette → **Extensions: Install from VSIX…**
+2. 选 `editor/tee-language.vsix`（脚手架项目里是 `.vscode/tee-language.vsix`）
+3. Reload，状态栏语言为 **Tee**，标签页图标为金色 T
+
+扩展会高亮插值和 `t-*`，并补全 `tee-framework` 的 `setup` / `computed` 以及模板里的字段。
+
+`src/vite-env.d.ts` 给 `import App from "./App.tee"` 提供模块类型。
 
 ## Tee Strata
 

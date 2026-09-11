@@ -4,3 +4,5 @@ dist
 *.log
 coverage
 .vite
+editor/vscode-tee/lib/tee-lsp.cjs
+editor/vscode-tee/lib/typescript/

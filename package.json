@@ -1,13 +1,14 @@
 {
   "name": "tee-framework",
-  "version": "0.8.2",
+  "version": "0.8.6",
   "description": "Tee — a point-to-point reactive frontend framework driven by bidirectional DOM maps, not a virtual DOM.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "create-tee": "./scripts/create-tee.mjs"
+    "create-tee": "./scripts/create-tee.mjs",
+    "tee-editor": "./scripts/install-tee-editor.mjs"
   },
   "exports": {
     ".": {
@@ -31,7 +32,8 @@
   ],
   "scripts": {
     "dev": "vite --port 43151 --host 0.0.0.0",
-    "build": "vite build --config vite.lib.config.ts && tsc -p tsconfig.build.json --noCheck",
+    "build": "vite build --config vite.lib.config.ts && tsc -p tsconfig.build.json --noCheck && npm run build:editor",
+    "build:editor": "node scripts/build-editor.mjs && node scripts/pack-tee-vsix.mjs",
     "build:demo": "vite build",
     "preview": "vite preview --port 43151 --host 0.0.0.0",
     "test": "vitest run",
@@ -61,10 +63,15 @@
     "access": "public"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "happy-dom": "^20.14.3",
     "less": "^4.4.2",
+    "tee-typescript": "npm:typescript@^5.9.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.0",
+    "vscode-css-languageservice": "^6.3.10",
+    "vscode-html-languageservice": "^5.6.2",
+    "vscode-languageserver-textdocument": "^1.0.14"
   }
 }

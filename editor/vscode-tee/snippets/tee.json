@@ -1,0 +1,38 @@
+{
+  "tee-if": {
+    "prefix": "t-if",
+    "body": "t-if=\"$1\"",
+    "description": "Conditionally mount this node."
+  },
+  "tee-else-if": {
+    "prefix": "t-else-if",
+    "body": "t-else-if=\"$1\"",
+    "description": "Else-if branch of a t-if chain."
+  },
+  "tee-repeat": {
+    "prefix": "t-repeat",
+    "body": "t-repeat=\"$1 in $2\"",
+    "description": "Repeat this node."
+  },
+  "tee-on-click": {
+    "prefix": "t-on:click",
+    "body": "t-on:click=\"$1\"",
+    "description": "Click handler."
+  },
+  "tee-model": {
+    "prefix": "t-model",
+    "body": "t-model=\"$1\"",
+    "description": "Two-way bind an input."
+  },
+  "tee-setup": {
+    "prefix": "setup",
+    "body": [
+      "import { setup, computed } from \"tee-framework\";",
+      "",
+      "export default setup((self) => {",
+      "  $0",
+      "});"
+    ],
+    "description": "Tee setup() entry."
+  }
+}

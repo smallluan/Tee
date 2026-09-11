@@ -11,6 +11,12 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "*": ["./*"],
+      "tee": ["./src/tee/index.ts"],
+      "tee-framework": ["./src/tee/index.ts"],
+      "tee-framework/plugin": ["./src/tee/plugin.ts"]
+    },
     "types": ["vite/client"]
   },
   "include": ["src", "tests"]

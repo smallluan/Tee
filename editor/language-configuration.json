@@ -1,15 +1,18 @@
 {
   "comments": {
-    "lineComment": "//",
-    "blockComment": ["<!--", "-->"]
+    "blockComment": ["<!--", "-->"],
+    "lineComment": "//"
   },
   "brackets": [
     ["<!--", "-->"],
     ["<", ">"],
+    ["{{", "}}"],
     ["{", "}"],
+    ["[", "]"],
     ["(", ")"]
   ],
   "autoClosingPairs": [
+    { "open": "{{", "close": "}}" },
     { "open": "{", "close": "}" },
     { "open": "[", "close": "]" },
     { "open": "(", "close": ")" },
@@ -20,14 +23,16 @@
   "surroundingPairs": [
     { "open": "'", "close": "'" },
     { "open": "\"", "close": "\"" },
+    { "open": "{{", "close": "}}" },
     { "open": "{", "close": "}" },
     { "open": "(", "close": ")" },
     { "open": "<", "close": ">" }
   ],
+  "wordPattern": "(-?\\d*\\.\\d\\w*)|([^\\`\\~\\!\\@\\%\\^\\&\\*\\(\\)\\=\\+\\[\\]\\{\\}\\\\\\|\\;\\:\\'\\\"\\,\\.\\<\\>\\/\\s]+)",
   "folding": {
     "markers": {
-      "start": "^\\s*<!--\\s*#region",
-      "end": "^\\s*<!--\\s*#endregion"
+      "start": "^\\s*<(template|script|style)\\b",
+      "end": "^\\s*</(template|script|style)>"
     }
   }
 }

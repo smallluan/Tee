@@ -2,12 +2,12 @@
   "files.associations": {
     "*.tee": "html"
   },
-  "html.customData": ["./.vscode/tee.html-data.json"],
+  "emmet.includeLanguages": {
+    "tee": "html",
+    "html": "html"
+  },
   "html.validate.styles": false,
   "html.validate.scripts": false,
   "css.validate": false,
-  "less.validate": false,
-  "emmet.includeLanguages": {
-    "tee": "html"
-  }
+  "less.validate": false
 }

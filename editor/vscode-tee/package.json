@@ -1,20 +1,27 @@
 {
   "name": "tee-language",
   "displayName": "Tee",
-  "description": "Syntax highlighting and completions for Tee `.tee` single-file components.",
-  "version": "0.6.0",
+  "description": "Syntax, IntelliSense, and file icon for Tee `.tee` single-file components.",
+  "version": "0.8.6",
   "publisher": "tee",
+  "icon": "icons/tee.png",
   "engines": {
     "vscode": "^1.80.0"
   },
   "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:tee", "workspaceContains:**/*.tee"],
+  "main": "./extension.cjs",
   "contributes": {
     "languages": [
       {
         "id": "tee",
         "aliases": ["Tee", "tee"],
         "extensions": [".tee"],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/tee-file-light.svg",
+          "dark": "./icons/tee-file-dark.svg"
+        }
       }
     ],
     "grammars": [
@@ -32,6 +39,27 @@
         }
       }
     ],
-    "html.customData": ["./tee.html-data.json"]
+    "snippets": [
+      {
+        "language": "tee",
+        "path": "./snippets/tee.json"
+      }
+    ],
+    "configurationDefaults": {
+      "files.associations": {
+        "*.tee": "tee"
+      },
+      "[tee]": {
+        "editor.quickSuggestions": {
+          "other": true,
+          "comments": false,
+          "strings": true
+        },
+        "editor.wordBasedSuggestions": "off"
+      },
+      "emmet.includeLanguages": {
+        "tee": "html"
+      }
+    }
   }
 }
