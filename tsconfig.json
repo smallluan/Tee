@@ -11,8 +11,8 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
     "paths": {
+      "*": ["./*"],
       "tee": ["./src/tee/index.ts"],
       "tee-framework": ["./src/tee/index.ts"],
       "tee-framework/plugin": ["./src/tee/plugin.ts"]

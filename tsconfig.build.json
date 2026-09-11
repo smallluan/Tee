@@ -6,7 +6,8 @@
     "emitDeclarationOnly": true,
     "outDir": "dist",
     "rootDir": "src/tee",
-    "types": []
+    "types": [],
+    "paths": {}
   },
   "include": ["src/tee/**/*.ts"],
   "exclude": ["src/tee/tee-lsp.ts", "src/tee/tee-virtual.ts"]
