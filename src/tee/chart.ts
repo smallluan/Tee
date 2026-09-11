@@ -14,11 +14,12 @@ import type { TagDef } from "./types";
  * re-renders, and nothing is renamed for the sake of sounding new.
  *
  * The words are the ones people already know. The contract is not Vue's:
- * names on `c` are the same names in `{{ }}`. A composable is a function
- * that writes onto `c` (or returns fields that get written onto `c`).
+ * names on `self` are the same names in `{{ }}`. A composable is a function
+ * that writes onto `self` (or returns fields that get written onto `self`).
  */
 
-export type Ctx = CtxApi & Record<string, unknown>;
+export type Self = CtxApi & Record<string, unknown>;
+export type Ctx = Self;
 
 const stack: Ctx[] = [];
 
@@ -203,13 +204,13 @@ export function runSetup(scope: Scope, fn: SetupFn): Ctx {
   }
 }
 
-export type SetupFn = (c: Ctx) => void | Record<string, unknown>;
+export type SetupFn = (self: Self) => void | Record<string, unknown>;
 
 export interface SetupDef extends Omit<TagDef, "setup"> {
   setup: SetupFn;
 }
 
-/** Component entry. `c` is the same object the template reads. */
+/** Component entry. `self` is the same object the template reads. */
 export function setup(fn: SetupFn): TagDef;
 export function setup(def: SetupDef): TagDef;
 export function setup(input: SetupFn | SetupDef): TagDef {

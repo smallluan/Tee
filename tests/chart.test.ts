@@ -8,14 +8,14 @@ import {
   onMounted,
   onUnmounted,
   ref,
-  type Ctx,
+  type Self,
 } from "tee";
 import { mount, tick } from "./helpers";
 
-function useCounter(c: Ctx) {
-  c.n = 0;
-  c.bump = () => {
-    c.n = Number(c.n) + 1;
+function useCounter(self: Self) {
+  self.n = 0;
+  self.bump = () => {
+    self.n = Number(self.n) + 1;
   };
 }
 
@@ -23,11 +23,11 @@ describe("setup uses familiar words on one shared object", () => {
   it("assigns fields, computed, and methods that the template already knows", async () => {
     const { app, host } = mount({
       template: `<button t-on:click="bump">{{ label }}</button>`,
-      setup(c) {
-        c.n = 1;
-        c.label = computed(() => `×${Number(c.n) * 2}`);
-        c.bump = () => {
-          c.n = Number(c.n) + 1;
+      setup(self) {
+        self.n = 1;
+        self.label = computed(() => `×${Number(self.n) * 2}`);
+        self.bump = () => {
+          self.n = Number(self.n) + 1;
         };
       },
     });
@@ -42,10 +42,10 @@ describe("setup uses familiar words on one shared object", () => {
     const seen: unknown[] = [];
     const { app } = mount({
       template: `<span>{{ n }}</span>`,
-      setup(c) {
-        c.n = 0;
+      setup(self) {
+        self.n = 0;
         watch(
-          () => c.n,
+          () => self.n,
           (n) => {
             seen.push(n);
           },
@@ -62,10 +62,10 @@ describe("setup uses familiar words on one shared object", () => {
     const seen: unknown[] = [];
     const { app } = mount({
       template: `<span>{{ n }}</span>`,
-      setup(c) {
-        c.n = 0;
+      setup(self) {
+        self.n = 0;
         watch(
-          () => c.n,
+          () => self.n,
           (n) => {
             seen.push(n);
           },
@@ -97,10 +97,10 @@ describe("setup uses familiar words on one shared object", () => {
     const seen: unknown[] = [];
     const { app } = mount({
       template: `<span>{{ n }}</span>`,
-      setup(c) {
-        c.n = 0;
+      setup(self) {
+        self.n = 0;
         watchEffect(() => {
-          seen.push(c.n);
+          seen.push(self.n);
         });
       },
     });
@@ -113,8 +113,8 @@ describe("setup uses familiar words on one shared object", () => {
   it("lets a composable write onto the same object the template reads", async () => {
     const { app, host } = mount({
       template: `<button t-on:click="bump">{{ n }}</button>`,
-      setup(c) {
-        useCounter(c);
+      setup(self) {
+        useCounter(self);
       },
     });
     expect(host.textContent).toBe("0");
@@ -147,10 +147,10 @@ describe("setup uses familiar words on one shared object", () => {
       setup({
         tag: "x-bump",
         template: `<em t-on:click="bump">{{ n }}</em>`,
-        setup(c) {
-          c.n = 4;
-          c.bump = () => {
-            c.n = Number(c.n) + 1;
+        setup(self) {
+          self.n = 4;
+          self.bump = () => {
+            self.n = Number(self.n) + 1;
           };
         },
       }),

@@ -11,6 +11,6 @@ npm run dev
 
 - `src/App.tee` — 模板 / setup 脚本 / Less（scoped）
 - `src/main.ts` — `Tee.create`
-- `.vscode/settings.json` — 把 `*.tee` 当成 HTML，并加载 Tee 指令补全
+- `.vscode/settings.json` — `*.tee` 当 HTML 做补全；关掉 CSS 校验，避免 `<style lang="less">` 里的 `@变量` 被当成非法 CSS
 
 在编辑器里打开 `App.tee` 时，`t-if` / `t-model` / `t-on:click` 应出现在属性补全里。语法高亮可安装仓库里的 `editor/vscode-tee` 扩展（`Extensions: Install from VSIX` 或「从文件夹安装」）。

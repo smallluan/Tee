@@ -11,7 +11,7 @@ export {
   ctxOf,
   runSetup,
 } from "./chart";
-export type { Ctx, SetupFn, SetupDef, Ref, WatchOptions } from "./chart";
+export type { Self, Ctx, SetupFn, SetupDef, Ref, WatchOptions } from "./chart";
 export type { TeeOptions, TagDef, MapSnapshot, SiteSnapshot, WatchSource } from "./types";
 export { TwinMap } from "./maps";
 export { Engine } from "./engine";
