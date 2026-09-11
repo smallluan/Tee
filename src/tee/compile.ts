@@ -410,6 +410,7 @@ type FastRowBinding = {
   name: string | null;
   base: string;
   plan: ReturnType<typeof compileExpr>;
+  reactive: boolean;
 };
 
 type FastRowEvent = {
@@ -424,6 +425,7 @@ type FastRowRef = { path: number[]; name: string };
 type FastRowPlan = {
   root: Element;
   bindings: FastRowBinding[];
+  reactiveBindings: FastRowBinding[];
   events: FastRowEvent[];
   refs: FastRowRef[];
 };
@@ -439,7 +441,11 @@ function isFastRowTree(node: TmplNode): boolean {
   return node.children.every(isFastRowTree);
 }
 
-function createFastRowPlan(node: ElNode, scopeId: string | undefined): FastRowPlan {
+function createFastRowPlan(
+  node: ElNode,
+  scopeId: string | undefined,
+  keyedClassSrc: string | null,
+): FastRowPlan {
   const bindings: FastRowBinding[] = [];
   const events: FastRowEvent[] = [];
   const refs: FastRowRef[] = [];
@@ -453,6 +459,7 @@ function createFastRowPlan(node: ElNode, scopeId: string | undefined): FastRowPl
         name: null,
         base: "",
         plan: compileExpr(current.src),
+        reactive: true,
       });
       return document.createTextNode("");
     }
@@ -472,6 +479,7 @@ function createFastRowPlan(node: ElNode, scopeId: string | undefined): FastRowPl
           name: attr.name,
           base: attr.name === "class" ? el.getAttribute("class") || "" : "",
           plan: compileExpr(attr.value),
+          reactive: !(attr.name === "class" && path.length === 0 && attr.value === keyedClassSrc),
         });
       } else if (attr.kind === "ref") {
         refs.push({ path, name: attr.value });
@@ -493,7 +501,13 @@ function createFastRowPlan(node: ElNode, scopeId: string | undefined): FastRowPl
     return el;
   };
 
-  return { root: build(node, []) as Element, bindings, events, refs };
+  return {
+    root: build(node, []) as Element,
+    bindings,
+    reactiveBindings: bindings.filter((binding) => binding.reactive),
+    events,
+    refs,
+  };
 }
 
 const TABLE_CONTAINERS = new Set(["table", "thead", "tbody", "tfoot", "tr", "colgroup"]);
@@ -535,25 +549,28 @@ function applyFastBinding(binding: FastRowBinding, node: Node, value: unknown): 
   return value;
 }
 
-function fastRowRenderer(node: ElNode): (parent: Node, scope: Scope, ctx: CompileContext) => void {
+function fastRowRenderer(
+  node: ElNode,
+  keyedClassSrc: string | null,
+): (parent: Node, scope: Scope, ctx: CompileContext) => void {
   let cachedScopeId: string | undefined;
   let cached: FastRowPlan | undefined;
   return (parent, scope, ctx) => {
     if (!cached || cachedScopeId !== ctx.scopeId) {
       cachedScopeId = ctx.scopeId;
-      cached = createFastRowPlan(node, ctx.scopeId);
+      cached = createFastRowPlan(node, ctx.scopeId, keyedClassSrc);
     }
     const root = cached.root.cloneNode(true) as Element;
-    const bindingNodes = cached.bindings.map((binding) => nodeAtPath(root, binding.path));
+    const reactiveBindings = cached.reactiveBindings;
+    const bindingNodes = reactiveBindings.map((binding) => nodeAtPath(root, binding.path));
     for (const event of cached.events) {
       bindEvent(nodeAtPath(root, event.path) as Element, event.event, event.src, scope, event.mods);
     }
     for (const ref of cached.refs) bindRef(nodeAtPath(root, ref.path) as Element, ref.name, scope);
 
-    if (cached.bindings.length) {
-      const values = new Array<unknown>(cached.bindings.length);
+    if (reactiveBindings.length) {
+      const values = new Array<unknown>(reactiveBindings.length);
       let initialized = false;
-      const plan = cached;
       addSite(ctx, {
         kind: "attr",
         node: root,
@@ -568,8 +585,8 @@ function fastRowRenderer(node: ElNode): (parent: Node, scope: Scope, ctx: Compil
           }
           engine.startTrack();
           try {
-            for (let i = 0; i < plan.bindings.length; i++) {
-              const binding = plan.bindings[i];
+            for (let i = 0; i < reactiveBindings.length; i++) {
+              const binding = reactiveBindings[i];
               const value = readFastBinding(binding, scope);
               const normalized =
                 binding.name === "class"
@@ -597,8 +614,11 @@ function fastRowRenderer(node: ElNode): (parent: Node, scope: Scope, ctx: Compil
   };
 }
 
-function rowRenderer(node: ElNode): (parent: Node, scope: Scope, ctx: CompileContext) => void {
-  if (isFastRowTree(node)) return fastRowRenderer(node);
+function rowRenderer(
+  node: ElNode,
+  keyedClassSrc: string | null = null,
+): (parent: Node, scope: Scope, ctx: CompileContext) => void {
+  if (isFastRowTree(node)) return fastRowRenderer(node, keyedClassSrc);
   if (isAotNative(node)) {
     const body = generateRenderBody([node]);
     const fn = new Function("__rt", "parent", "s", "ctx", body);
@@ -607,6 +627,36 @@ function rowRenderer(node: ElNode): (parent: Node, scope: Scope, ctx: CompileCon
     };
   }
   return (parent, scope, ctx) => mountNode(node, parent, scope, ctx);
+}
+
+type KeyedClassPlan = {
+  src: string;
+  className: string;
+  selectedSrc: string;
+};
+
+function keyedClassPlan(
+  node: ElNode,
+  itemName: string,
+  keySrc: string | null,
+): KeyedClassPlan | null {
+  if (!keySrc || !keySrc.startsWith(itemName + ".")) return null;
+  const attr = node.attrs.find((candidate) => candidate.kind === "bind" && candidate.name === "class");
+  if (!attr || attr.kind !== "bind") return null;
+  const match = attr.value.match(
+    /^\{\s*([A-Za-z_$][\w$-]*)\s*:\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*===\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\}$/,
+  );
+  if (!match) return null;
+  const [, className, left, right] = match;
+  const selectedSrc = left === keySrc ? right : right === keySrc ? left : null;
+  if (!selectedSrc || selectedSrc === keySrc || selectedSrc.startsWith(itemName + ".")) return null;
+  return { src: attr.value, className, selectedSrc };
+}
+
+function repeatRowElement(row: RepeatRow | undefined): Element | null {
+  if (!row) return null;
+  for (const node of row.nodes) if (node.nodeType === 1) return node as Element;
+  return null;
 }
 
 type RepeatRow = {
@@ -1146,7 +1196,10 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
   parent.appendChild(start);
   parent.appendChild(end);
   const rows = new Map<string, RepeatRow>();
-  const render = rowRenderer(stripped);
+  const classPlan = keyedClassPlan(stripped, parsed.item, keySrc);
+  const render = rowRenderer(stripped, classPlan?.src ?? null);
+  let selectedKey: string | null = null;
+  let syncSelectedRow = () => undefined;
 
   addSite(ctx, {
     kind: "repeat",
@@ -1166,9 +1219,33 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
           end,
           render,
         );
+        syncSelectedRow();
       });
     },
   });
+
+  if (classPlan) {
+    const setSelected = (key: string | null, on: boolean) => {
+      const el = key == null ? null : repeatRowElement(rows.get(key));
+      el?.classList.toggle(classPlan.className, on);
+    };
+    syncSelectedRow = () => setSelected(selectedKey, true);
+    addSite(ctx, {
+      kind: "attr",
+      node: start,
+      label: `keyed class ${classPlan.selectedSrc}`,
+      rank: rankOf("attr", compileExpr(classPlan.selectedSrc).stable),
+      run() {
+        applyReactive(this, ctx, scope, classPlan.selectedSrc, (value) => {
+          const next = value == null ? null : String(value);
+          if (next === selectedKey) return;
+          setSelected(selectedKey, false);
+          selectedKey = next;
+          setSelected(selectedKey, true);
+        });
+      },
+    });
+  }
 }
 
 function mountTagNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileContext): void {

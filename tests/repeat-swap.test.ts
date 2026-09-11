@@ -135,8 +135,8 @@ describe("keyed t-repeat", () => {
 
     app.data.selected = 2;
     await tick(app);
-    expect(writes).toBe(1);
     expect(second.getAttribute("class")).toBe("on");
+    expect(app.maps().reverse.filter((site) => site.label === "keyed class selected")).toHaveLength(1);
   });
 
   it("groups native row bindings into one reactive site per row", () => {
