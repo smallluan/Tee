@@ -159,6 +159,18 @@ describe("keyed t-repeat", () => {
     expect(sites.filter((site) => site.label === "repeat row bindings")).toHaveLength(3);
     expect(sites).toHaveLength(4);
     expect(host.querySelector("tr")?.childNodes).toHaveLength(2);
+    expect(host.querySelector("td")?.childNodes).toHaveLength(1);
+  });
+
+  it("preserves meaningful whitespace between inline children", () => {
+    const { host } = mount({
+      template:
+        `<p t-repeat="item in items" t-key="item.id">` +
+        `<span>{{ item.first }}</span> <span>{{ item.last }}</span></p>`,
+      data: { items: [{ id: 1, first: "Ada", last: "Lovelace" }] },
+    });
+
+    expect(host.querySelector("p")?.textContent).toBe("Ada Lovelace");
   });
 
   it("updates fast row bindings when an item is replaced under the same key", async () => {

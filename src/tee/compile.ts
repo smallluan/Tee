@@ -478,8 +478,15 @@ function createFastRowPlan(node: ElNode, scopeId: string | undefined): FastRowPl
       }
     }
     let childIndex = 0;
-    for (const child of current.children) {
-      if (TABLE_CONTAINERS.has(current.tag) && child.t === "text" && !child.value.trim()) continue;
+    for (let i = 0; i < current.children.length; i++) {
+      const child = current.children[i];
+      if (
+        child.t === "text" &&
+        !child.value.trim() &&
+        (TABLE_CONTAINERS.has(current.tag) || i === 0 || i === current.children.length - 1)
+      ) {
+        continue;
+      }
       el.appendChild(build(child, [...path, childIndex]));
       childIndex += 1;
     }
