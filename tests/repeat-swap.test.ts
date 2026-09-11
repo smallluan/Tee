@@ -116,6 +116,29 @@ describe("keyed t-repeat", () => {
     expect(app.stats().run).toBe(3);
   });
 
+  it("disposes detached fast row owners with their containing structure", async () => {
+    const { app, host } = mount({
+      template:
+        `<ul t-show="visible">` +
+        `<li t-repeat="item in items" t-key="item.id">{{ item.name }}</li>` +
+        `</ul>`,
+      data: {
+        visible: true,
+        items: [
+          { id: 1, name: "a" },
+          { id: 2, name: "b" },
+        ],
+      },
+    });
+
+    expect(app.maps().reverse.filter((site) => site.label === "repeat row bindings")).toHaveLength(2);
+    app.data.visible = false;
+    await tick(app);
+
+    expect(host.querySelectorAll("li")).toHaveLength(0);
+    expect(app.maps().reverse.filter((site) => site.label === "repeat row bindings")).toHaveLength(0);
+  });
+
   it("still swaps in place after the list is replaced", async () => {
     const { app, host } = mount({
       template: `<li t-repeat="item in items" t-key="item.id">{{ item.name }}</li>`,

@@ -19,6 +19,7 @@ export interface Site {
   linked?: boolean;
   queued?: boolean;
   dead?: boolean;
+  dispose?: () => void;
   last?: unknown;
   depIds?: number[];
   seen?: number[];
