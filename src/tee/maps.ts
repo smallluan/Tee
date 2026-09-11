@@ -2,6 +2,7 @@ import type { PropKey, Site } from "./types";
 
 const EMPTY_SITES: ReadonlySet<Site> = new Set();
 const EMPTY_PROPS: ReadonlySet<PropKey> = new Set();
+type SiteBucket = Site | Set<Site>;
 
 /**
  * TwinMap is Tee's only update index.
@@ -11,22 +12,24 @@ const EMPTY_PROPS: ReadonlySet<PropKey> = new Set();
  * A write looks up forward, then patches those nodes. There is no virtual tree.
  */
 export class TwinMap {
-  readonly forward = new Map<PropKey, Set<Site>>();
+  readonly forward = new Map<PropKey, SiteBucket>();
   readonly reverse = new Map<Site, Set<PropKey>>();
   readonly debug = new Map<Site, Set<string>>();
 
   link(site: Site, props: Iterable<PropKey>, debugProps?: Iterable<string>): void {
     this.unlink(site);
-    const set = new Set(props);
+    const set = props instanceof Set ? props : new Set(props);
     this.reverse.set(site, set);
-    this.debug.set(site, new Set(debugProps ?? set));
+    this.debug.set(site, debugProps instanceof Set ? debugProps : new Set(debugProps ?? set));
     for (const prop of set) {
-      let bucket = this.forward.get(prop);
+      const bucket = this.forward.get(prop);
       if (!bucket) {
-        bucket = new Set();
-        this.forward.set(prop, bucket);
+        this.forward.set(prop, site);
+      } else if (bucket instanceof Set) {
+        bucket.add(site);
+      } else if (bucket !== site) {
+        this.forward.set(prop, new Set([bucket, site]));
       }
-      bucket.add(site);
     }
   }
 
@@ -47,15 +50,32 @@ export class TwinMap {
     for (const prop of prev) {
       const bucket = this.forward.get(prop);
       if (!bucket) continue;
-      bucket.delete(site);
-      if (bucket.size === 0) this.forward.delete(prop);
+      if (bucket instanceof Set) {
+        bucket.delete(site);
+        if (bucket.size === 0) this.forward.delete(prop);
+        else if (bucket.size === 1) this.forward.set(prop, bucket.values().next().value as Site);
+      } else if (bucket === site) {
+        this.forward.delete(prop);
+      }
     }
     this.reverse.delete(site);
     this.debug.delete(site);
   }
 
   sitesFor(prop: PropKey): ReadonlySet<Site> {
-    return this.forward.get(prop) ?? EMPTY_SITES;
+    const bucket = this.forward.get(prop);
+    if (!bucket) return EMPTY_SITES;
+    return bucket instanceof Set ? bucket : new Set([bucket]);
+  }
+
+  forEachSite(prop: PropKey, visit: (site: Site) => void): void {
+    const bucket = this.forward.get(prop);
+    if (!bucket) return;
+    if (bucket instanceof Set) {
+      for (const site of bucket) visit(site);
+    } else {
+      visit(bucket);
+    }
   }
 
   propsFor(site: Site): ReadonlySet<PropKey> {

@@ -53,7 +53,7 @@ export class Engine {
   notify(prop: PropKey): void {
     this.stats.notify += 1;
     this.lattice.bump(prop);
-    for (const site of this.maps.sitesFor(prop)) this.mark(site);
+    this.maps.forEachSite(prop, (site) => this.mark(site));
     if (!this.flushing) this.schedule();
   }
 
@@ -168,11 +168,12 @@ export class Engine {
     reverse.sort((a, b) => a.id - b.id);
 
     const forward: MapSnapshot["forward"] = [];
-    for (const [prop, sites] of this.maps.forward) {
+    for (const [prop, bucket] of this.maps.forward) {
+      const sites = bucket instanceof Set ? [...bucket] : [bucket];
       forward.push({
         prop,
         label: prop,
-        sites: [...sites]
+        sites: sites
           .map((site) =>
             describeSite(site, [...this.maps.propsFor(site)], [...(this.maps.debug.get(site) ?? [])]),
           )

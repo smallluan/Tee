@@ -17,6 +17,8 @@ describe("TwinMap", () => {
     expect([...maps.sitesFor("title")].map((s) => s.id).sort()).toEqual([1, 2]);
     expect([...maps.sitesFor("user.name")].map((s) => s.id)).toEqual([1]);
     expect([...maps.propsFor(a)]).toEqual(["user.name", "title"]);
+    expect(maps.forward.get("user.name")).toBe(a);
+    expect(maps.forward.get("title")).toBeInstanceOf(Set);
   });
 
   it("relinks a site without leaving stale forward entries", () => {

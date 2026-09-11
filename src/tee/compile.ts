@@ -685,7 +685,7 @@ function reconcileRepeat(
     rows.delete(key);
   }
 
-  if (!created && !removed && !moved) return;
+  if (!created && !moved) return;
   patchRepeatDom(end, ordered, oldPositions, reused);
 }
 
