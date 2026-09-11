@@ -660,7 +660,12 @@ function reconcileRepeat(
         row.scope[parsed.index] = index;
         localsChanged = true;
       }
-      if (localsChanged) for (const site of row.inst.sites) ctx.engine.mark(site);
+      if (localsChanged) {
+        for (const site of row.inst.sites) {
+          site.linked = false;
+          ctx.engine.mark(site);
+        }
+      }
     }
     ordered.push(row);
   }

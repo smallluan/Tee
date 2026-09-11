@@ -163,7 +163,7 @@ describe("keyed t-repeat", () => {
 
   it("updates fast row bindings when an item is replaced under the same key", async () => {
     const { app, host } = mount({
-      template: `<p t-repeat="item in items" t-key="item.id">{{ item.name }}-{{ index }}</p>`,
+      template: `<p t-repeat="item in items" t-key="item.id">{{ item.name }}-{{ $index }}</p>`,
       data: {
         items: [
           { id: 1, name: "a" },
