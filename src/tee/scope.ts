@@ -1,6 +1,8 @@
 import type { Engine } from "./engine";
 import { evalExpr, runStmt } from "./expr";
+import { compileExpr, compileStmt } from "./ir";
 import { observe } from "./observe";
+import { Rank } from "./strata";
 import type { ComputedMap, MethodMap, WatchSource } from "./types";
 import type { Instance } from "./instance";
 
@@ -64,31 +66,37 @@ function bindComputed(
 ): () => unknown {
   const key = engine.nextComputedId(name);
   let cache: unknown = undefined;
-  let dirty = true;
 
-  const site = {
+  const site: import("./types").Site = {
     id: engine.nextSiteId(),
-    kind: "computed" as const,
+    kind: "computed",
     node: null,
     label: `computed ${name}`,
+    rank: Rank.Derived,
     run: () => {
-      dirty = true;
-      engine.notify(key);
+      if (site.linked && !engine.stale(site)) {
+        engine.stats.skipClock += 1;
+        return;
+      }
+      engine.startTrack();
+      let next: unknown;
+      try {
+        next = getter();
+      } finally {
+        engine.commitTrack(site, engine.stopTrack());
+      }
+      const changed = !Object.is(next, cache);
+      cache = next;
+      if (changed) engine.notify(key);
+      else engine.stats.skipEqual += 1;
     },
   };
   instance.sites.push(site);
 
   const reader = () => {
     engine.record(key, name);
-    if (!dirty) return cache;
-    engine.startTrack();
-    try {
-      cache = getter();
-    } finally {
-      const tracked = engine.stopTrack();
-      engine.maps.link(site, tracked.props, tracked.labels);
-      dirty = false;
-    }
+    if (!site.linked || engine.stale(site)) site.run();
+    else engine.stats.skipClock += 1;
     return cache;
   };
   return reader;
@@ -109,16 +117,21 @@ function bindWatchers(
       kind: "watch" as const,
       node: null,
       label: `watch ${path}`,
+      rank: Rank.Watch,
       run: () => {
+        if (site.linked && !engine.stale(site)) {
+          engine.stats.skipClock += 1;
+          return;
+        }
         engine.startTrack();
         let next: unknown;
         try {
           next = readPath(scope, path);
         } finally {
-          const tracked = engine.stopTrack();
-          engine.maps.link(site, tracked.props, tracked.labels);
+          engine.commitTrack(site, engine.stopTrack());
         }
         if (primed && !Object.is(next, prev)) handler.call(scope, next, prev);
+        else if (primed) engine.stats.skipEqual += 1;
         prev = next;
         primed = true;
       },
@@ -235,9 +248,18 @@ function makeScope(
 }
 
 export function runExpr(scope: Scope, src: string): unknown {
+  const plan = compileExpr(src);
+  if (plan.run) return plan.run((name) => scope.$lookup(name));
   return evalExpr(src, scope);
 }
 
 export function runStatement(scope: Scope, src: string, event?: Event): unknown {
+  const plan = compileStmt(src);
+  if (plan.t === "assign") {
+    const value = plan.run((name) => scope.$lookup(name));
+    scope.$assign(plan.path.join("."), value);
+    return value;
+  }
+  if (plan.t === "call") return plan.run((name) => scope.$lookup(name));
   return runStmt(src, scope, event);
 }

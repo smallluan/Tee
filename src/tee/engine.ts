@@ -1,4 +1,5 @@
 import { TwinMap } from "./maps";
+import { RANK_COUNT, Rank, Lattice, emptyStats, type FlushStats } from "./strata";
 import type { MapSnapshot, PropKey, Site, SiteSnapshot } from "./types";
 
 interface TrackFrame {
@@ -8,14 +9,19 @@ interface TrackFrame {
 
 export class Engine {
   readonly maps = new TwinMap();
-  readonly dirty = new Set<Site>();
+  readonly lattice = new Lattice();
+  readonly buckets: Site[][] = Array.from({ length: RANK_COUNT }, () => []);
+  private spare: Site[][] = Array.from({ length: RANK_COUNT }, () => []);
   private tracking: TrackFrame[] = [];
   private queued = false;
+  private flushing = false;
   private waiters: Array<() => void> = [];
   private flushHooks: Array<() => void> = [];
   private seq = 0;
   private objectSeq = 0;
   private computedSeq = 0;
+  stats: FlushStats = emptyStats();
+  lastFlush: FlushStats = emptyStats();
 
   nextSiteId(): number {
     return ++this.seq;
@@ -44,11 +50,57 @@ export class Engine {
     return this.tracking.pop() ?? { props: new Set(), labels: new Set() };
   }
 
-  private flushing = false;
-
   notify(prop: PropKey): void {
-    for (const site of this.maps.sitesFor(prop)) this.dirty.add(site);
+    this.stats.notify += 1;
+    this.lattice.bump(prop);
+    for (const site of this.maps.sitesFor(prop)) this.mark(site);
     if (!this.flushing) this.schedule();
+  }
+
+  mark(site: Site): void {
+    if (site.dead || site.queued) return;
+    site.queued = true;
+    this.stats.mark += 1;
+    this.buckets[site.rank ?? Rank.Expr].push(site);
+  }
+
+  stale(site: Site): boolean {
+    const deps = site.depIds;
+    const seen = site.seen;
+    if (!deps || !seen || deps.length === 0) return true;
+    const clocks = this.lattice.clocks;
+    for (let i = 0; i < deps.length; i++) if (clocks[deps[i]] !== seen[i]) return true;
+    return false;
+  }
+
+  capture(site: Site): void {
+    const props = this.maps.propsFor(site);
+    const depIds = new Array<number>(props.size);
+    const seen = new Array<number>(props.size);
+    let i = 0;
+    for (const prop of props) {
+      const id = this.lattice.intern(prop);
+      depIds[i] = id;
+      seen[i] = this.lattice.clocks[id];
+      i += 1;
+    }
+    site.depIds = depIds;
+    site.seen = seen;
+  }
+
+  touch(site: Site): void {
+    const deps = site.depIds;
+    if (!deps) return;
+    const seen = site.seen ?? new Array<number>(deps.length);
+    const clocks = this.lattice.clocks;
+    for (let i = 0; i < deps.length; i++) seen[i] = clocks[deps[i]];
+    site.seen = seen;
+  }
+
+  commitTrack(site: Site, tracked: { props: Set<PropKey>; labels: Set<string> }): void {
+    if (this.maps.linkIfChanged(site, tracked.props, tracked.labels)) this.stats.relink += 1;
+    this.capture(site);
+    site.linked = true;
   }
 
   schedule(): void {
@@ -60,14 +112,36 @@ export class Engine {
   flush(): void {
     this.queued = false;
     this.flushing = true;
-    let guard = 0;
-    while (this.dirty.size && guard < 100) {
-      const batch = [...this.dirty];
-      this.dirty.clear();
-      for (const site of batch) site.run();
-      guard += 1;
+    this.stats.run = 0;
+    this.stats.skipClock = 0;
+    this.stats.skipEqual = 0;
+    this.stats.relink = 0;
+    this.stats.patch = 0;
+    let pass = 0;
+    while (pass < 8) {
+      let work = false;
+      for (let rank = 0; rank < RANK_COUNT; rank++) {
+        const batch = this.buckets[rank];
+        if (batch.length === 0) continue;
+        this.buckets[rank] = this.spare[rank];
+        this.spare[rank] = batch;
+        work = true;
+        for (let i = 0; i < batch.length; i++) {
+          const site = batch[i];
+          site.queued = false;
+          if (!site.dead) {
+            this.stats.run += 1;
+            site.run();
+          }
+        }
+        batch.length = 0;
+      }
+      if (!work) break;
+      pass += 1;
     }
     this.flushing = false;
+    this.lastFlush = this.stats;
+    this.stats = emptyStats();
     for (const hook of this.flushHooks) hook();
     const waiters = this.waiters;
     this.waiters = [];
@@ -75,7 +149,7 @@ export class Engine {
   }
 
   afterFlush(): Promise<void> {
-    if (!this.queued && this.dirty.size === 0) return Promise.resolve();
+    if (!this.queued && !this.hasDirty()) return Promise.resolve();
     return new Promise((resolve) => this.waiters.push(resolve));
   }
 
@@ -95,11 +169,9 @@ export class Engine {
 
     const forward: MapSnapshot["forward"] = [];
     for (const [prop, sites] of this.maps.forward) {
-      const first = reverse.find((s) => this.maps.forward.get(prop)?.has(findSite(this, s.id)!));
-      const label = first?.debugProps.find((d) => d.endsWith(prop.split(".").slice(-1)[0] ?? "")) ?? prop;
       forward.push({
         prop,
-        label,
+        label: prop,
         sites: [...sites]
           .map((site) =>
             describeSite(site, [...this.maps.propsFor(site)], [...(this.maps.debug.get(site) ?? [])]),
@@ -113,16 +185,17 @@ export class Engine {
 
   destroy(): void {
     this.maps.clear();
-    this.dirty.clear();
+    for (const bucket of this.buckets) bucket.length = 0;
+    for (const bucket of this.spare) bucket.length = 0;
     this.tracking = [];
     this.flushHooks = [];
     this.waiters = [];
   }
-}
 
-function findSite(engine: Engine, id: number): Site | undefined {
-  for (const site of engine.maps.reverse.keys()) if (site.id === id) return site;
-  return undefined;
+  private hasDirty(): boolean {
+    for (const bucket of this.buckets) if (bucket.length) return true;
+    return false;
+  }
 }
 
 function describeSite(site: Site, props: string[], debugProps: string[]): SiteSnapshot {
@@ -139,7 +212,7 @@ function describeSite(site: Site, props: string[], debugProps: string[]): SiteSn
 function describeNode(node: Node | null): string {
   if (!node) return "(none)";
   if (node.nodeType === 8) return `#comment ${node.textContent ?? ""}`;
-  if (node.nodeType === 3) return `#text ${JSON.stringify((node.textContent ?? "").slice(0, 40))}`;
+  if (node.nodeType === 3) return `#text ${JSON.stringify((node.data ?? "").slice(0, 40))}`;
   if (node.nodeType === 1) {
     const el = node as Element;
     const id = el.id ? `#${el.id}` : "";

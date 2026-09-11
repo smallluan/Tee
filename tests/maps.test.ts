@@ -30,4 +30,13 @@ describe("TwinMap", () => {
     expect(maps.forward.size).toBe(0);
     expect(maps.reverse.size).toBe(0);
   });
+
+  it("skips relink when the reverse set is unchanged", () => {
+    const maps = new TwinMap();
+    const a = site(1);
+    expect(maps.linkIfChanged(a, ["title"])).toBe(true);
+    expect(maps.linkIfChanged(a, ["title"])).toBe(false);
+    expect(maps.linkIfChanged(a, ["title", "name"])).toBe(true);
+    expect([...maps.propsFor(a)].sort()).toEqual(["name", "title"]);
+  });
 });

@@ -23,7 +23,10 @@ export class Instance {
     this.detached = true;
     for (const child of this.children) child.destroy();
     this.children.length = 0;
-    for (const site of this.sites) this.engine.maps.unlink(site);
+    for (const site of this.sites) {
+      site.dead = true;
+      this.engine.maps.unlink(site);
+    }
     this.sites.length = 0;
     if (this.root && this.root.parentNode) this.root.parentNode.removeChild(this.root);
   }

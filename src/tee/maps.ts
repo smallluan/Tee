@@ -30,6 +30,17 @@ export class TwinMap {
     }
   }
 
+  /** Relink only when the reverse dep set actually changed. */
+  linkIfChanged(site: Site, props: Iterable<PropKey>, debugProps?: Iterable<string>): boolean {
+    const prev = this.reverse.get(site);
+    if (prev && sameSet(prev, props)) {
+      if (debugProps) this.debug.set(site, new Set(debugProps));
+      return false;
+    }
+    this.link(site, props, debugProps);
+    return true;
+  }
+
   unlink(site: Site): void {
     const prev = this.reverse.get(site);
     if (!prev) return;
@@ -56,4 +67,13 @@ export class TwinMap {
     this.reverse.clear();
     this.debug.clear();
   }
+}
+
+function sameSet(prev: ReadonlySet<PropKey>, next: Iterable<PropKey>): boolean {
+  let n = 0;
+  for (const prop of next) {
+    if (!prev.has(prop)) return false;
+    n += 1;
+  }
+  return n === prev.size;
 }

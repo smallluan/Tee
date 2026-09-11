@@ -1,6 +1,6 @@
 {
   "name": "tee",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Tee — a point-to-point reactive frontend framework driven by bidirectional DOM maps, not a virtual DOM.",
   "type": "module",
   "main": "./src/tee/index.ts",

@@ -64,6 +64,9 @@ export function parseRepeat(stmt: string): { item: string; index: string; list: 
 
 export function display(value: unknown): string {
   if (value == null) return "";
+  const t = typeof value;
+  if (t === "string") return value as string;
+  if (t === "number" || t === "boolean" || t === "bigint") return "" + (value as string | number | boolean);
   if (typeof value === "object") {
     try {
       return JSON.stringify(value);
@@ -72,6 +75,11 @@ export function display(value: unknown): string {
     }
   }
   return String(value);
+}
+
+export function writeText(node: Text, value: unknown): void {
+  const s = display(value);
+  if (node.data !== s) node.data = s;
 }
 
 const BOOLEAN_ATTRS = new Set([

@@ -270,6 +270,7 @@ code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
 }
+.flow.strata { grid-template-columns: repeat(5, 1fr); }
 .flow div { background: var(--card); border: 1px solid var(--line); padding: 16px; }
 .flow strong { display: block; font-family: Fraunces, serif; margin-bottom: 6px; }
 .footer {
@@ -283,7 +284,7 @@ code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
 }
 
 @media (max-width: 900px) {
-  .hero-grid, .map-grid, .feature, .feature.reverse, .split, .ribbon, .maps, .quotes, .flow, .totals {
+  .hero-grid, .map-grid, .feature, .feature.reverse, .split, .ribbon, .maps, .quotes, .flow, .flow.strata, .totals {
     grid-template-columns: 1fr;
   }
   .feature.reverse .copy { order: 0; }

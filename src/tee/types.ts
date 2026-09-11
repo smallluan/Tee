@@ -15,6 +15,13 @@ export interface Site {
   node: Node | null;
   label: string;
   run: () => void;
+  rank?: number;
+  linked?: boolean;
+  queued?: boolean;
+  dead?: boolean;
+  last?: unknown;
+  depIds?: number[];
+  seen?: number[];
 }
 
 export type WatchHandler = (next: unknown, prev: unknown) => void;

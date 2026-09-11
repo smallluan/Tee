@@ -6,7 +6,7 @@ import type { MapSnapshot, TagDef, TeeOptions } from "./types";
 
 const registry = new Map<string, TagDef>();
 
-export const version = "0.1.0";
+export const version = "0.3.0";
 
 export function define(name: string, def: TagDef): TagDef {
   registry.set(name.toLowerCase(), def);
@@ -61,6 +61,10 @@ export class TeeApp {
 
   maps(): MapSnapshot {
     return this.engine.snapshot();
+  }
+
+  stats() {
+    return this.engine.lastFlush;
   }
 
   onFlush(hook: () => void): () => void {

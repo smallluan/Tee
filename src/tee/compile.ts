@@ -1,8 +1,10 @@
-import { display, isBooleanAttr, parseRepeat, splitInterpolation } from "./expr";
+import { display, isBooleanAttr, parseRepeat, splitInterpolation, writeText } from "./expr";
 import type { Engine } from "./engine";
+import { compileExpr } from "./ir";
 import { Instance } from "./instance";
 import { touchList } from "./observe";
 import { runExpr, runStatement, type Scope, createRootScope } from "./scope";
+import { Rank, rankOf } from "./strata";
 import type { Site, TagDef } from "./types";
 
 export interface CompileContext {
@@ -79,18 +81,9 @@ function bindText(text: Text, scope: Scope, ctx: CompileContext): void {
         kind: "text",
         node,
         label: `{{ ${part.value} }}`,
+        rank: rankOf("text", compileExpr(part.value).stable),
         run() {
-          ctx.engine.startTrack();
-          let value: unknown;
-          try {
-            value = runExpr(scope, part.value);
-          } catch (error) {
-            console.error(error);
-            value = "";
-          }
-          const tracked = ctx.engine.stopTrack();
-          ctx.engine.maps.link(this, tracked.props, tracked.labels);
-          node.textContent = display(value);
+          applyReactive(this, ctx, scope, part.value, (value) => writeText(node, value));
         },
       });
     }
@@ -133,28 +126,21 @@ function bindAttr(el: Element, name: string, src: string, scope: Scope, ctx: Com
     kind: "attr",
     node: el,
     label: `[${name}] ${src}`,
+    rank: rankOf("attr", compileExpr(src).stable),
     run() {
-      ctx.engine.startTrack();
-      let value: unknown;
-      try {
-        value = runExpr(scope, src);
-      } catch (error) {
-        console.error(error);
-        value = undefined;
-      }
-      const tracked = ctx.engine.stopTrack();
-      ctx.engine.maps.link(this, tracked.props, tracked.labels);
-      applyAttr(el, name, value);
+      applyReactive(this, ctx, scope, src, (value) => applyAttr(el, name, value));
     },
   });
 }
 
 function applyAttr(el: Element, name: string, value: unknown): void {
   if (name === "class" && value && typeof value === "object" && !Array.isArray(value)) {
-    const classes = Object.entries(value as Record<string, unknown>)
+    const next = Object.entries(value as Record<string, unknown>)
       .filter(([, on]) => on)
-      .map(([cls]) => cls);
-    el.setAttribute("class", classes.join(" "));
+      .map(([cls]) => cls)
+      .join(" ");
+    if (next) el.setAttribute("class", next);
+    else el.removeAttribute("class");
     return;
   }
   if (isBooleanAttr(name)) {
@@ -193,27 +179,21 @@ function bindModel(el: Element, path: string, scope: Scope, ctx: CompileContext)
     kind: "model",
     node: el,
     label: `model ${path}`,
+    rank: rankOf("model", compileExpr(path).stable),
     run() {
-      ctx.engine.startTrack();
-      let value: unknown;
-      try {
-        value = runExpr(scope, path);
-      } catch (error) {
-        console.error(error);
-        value = "";
-      }
-      const tracked = ctx.engine.stopTrack();
-      ctx.engine.maps.link(this, tracked.props, tracked.labels);
-      if (el instanceof HTMLInputElement && isCheck) {
-        el.checked = Boolean(value);
-      } else if (
-        el instanceof HTMLInputElement ||
-        el instanceof HTMLTextAreaElement ||
-        el instanceof HTMLSelectElement
-      ) {
-        const next = display(value);
-        if (el.value !== next) el.value = next;
-      }
+      applyReactive(this, ctx, scope, path, (value) => {
+        if (el instanceof HTMLInputElement && isCheck) {
+          const on = Boolean(value);
+          if (el.checked !== on) el.checked = on;
+        } else if (
+          el instanceof HTMLInputElement ||
+          el instanceof HTMLTextAreaElement ||
+          el instanceof HTMLSelectElement
+        ) {
+          const next = display(value);
+          if (el.value !== next) el.value = next;
+        }
+      });
     },
   });
 }
@@ -232,29 +212,25 @@ function bindShow(el: Element, scope: Scope, ctx: CompileContext): void {
     kind: "show",
     node: anchor,
     label: `t-show ${src}`,
+    rank: Rank.Structure,
     run() {
-      ctx.engine.startTrack();
-      let on = false;
-      try {
-        on = Boolean(runExpr(scope, src));
-      } catch (error) {
-        console.error(error);
-      }
-      const tracked = ctx.engine.stopTrack();
-      ctx.engine.maps.link(this, tracked.props, tracked.labels);
-      if (on && !visible) {
-        const node = template.cloneNode(true) as Element;
-        const inst = ctx.instance.child();
-        const nodes = compileDetached(node, scope, { ...ctx, instance: inst });
-        for (const live of nodes) anchor.parentNode?.insertBefore(live, anchor);
-        current = { inst, nodes };
-        visible = true;
-      } else if (!on && visible && current) {
-        current.inst.destroy();
-        for (const live of current.nodes) live.parentNode?.removeChild(live);
-        current = null;
-        visible = false;
-      }
+      applyReactive(this, ctx, scope, src, (value) => {
+        const on = Boolean(value);
+        if (on === visible) return;
+        if (on && !visible) {
+          const node = template.cloneNode(true) as Element;
+          const inst = ctx.instance.child();
+          const nodes = compileDetached(node, scope, { ...ctx, instance: inst });
+          for (const live of nodes) anchor.parentNode?.insertBefore(live, anchor);
+          current = { inst, nodes };
+          visible = true;
+        } else if (!on && visible && current) {
+          current.inst.destroy();
+          for (const live of current.nodes) live.parentNode?.removeChild(live);
+          current = null;
+          visible = false;
+        }
+      });
     },
   });
 }
@@ -271,83 +247,82 @@ function bindRepeat(el: Element, scope: Scope, ctx: CompileContext): void {
   el.replaceWith(start);
   start.parentNode?.insertBefore(end, start.nextSibling);
 
-  type Row = { key: string; inst: Instance; nodes: Node[]; scope: Scope; locals: Record<string, unknown> };
+  type Row = {
+    key: string;
+    inst: Instance;
+    nodes: Node[];
+    scope: Scope;
+    item: unknown;
+    index: number;
+  };
   const rows = new Map<string, Row>();
 
   addSite(ctx, {
     kind: "repeat",
     node: start,
     label: `t-repeat ${stmt}`,
+    rank: Rank.Structure,
     run() {
-      ctx.engine.startTrack();
-      let list: unknown;
-      try {
-        list = runExpr(scope, parsed.list);
-        touchList(list, ctx.engine);
-      } catch (error) {
-        console.error(error);
-        list = [];
-      }
-      const tracked = ctx.engine.stopTrack();
-      ctx.engine.maps.link(this, tracked.props, tracked.labels);
+      applyReactive(this, ctx, scope, parsed.list, (list) => {
+        const items = Array.isArray(list) ? list : [];
+        const used = new Set<string>();
+        const ordered: Row[] = [];
 
-      const items = Array.isArray(list) ? list : [];
-      const nextKeys: string[] = [];
-      const used = new Set<string>();
-      const ordered: Row[] = [];
+        let structural = false;
+        for (let index = 0; index < items.length; index++) {
+          const item = items[index];
+          let key = keyFor(item, index, keySrc, parsed.item, parsed.index, scope);
+          while (used.has(key)) key += "#" + index;
+          used.add(key);
 
-      items.forEach((item, index) => {
-        const locals: Record<string, unknown> = {
-          [parsed.item]: item,
-          [parsed.index]: index,
-        };
-        const childScope = scope.$child(locals);
-        let key: string;
-        if (keySrc) {
-          try {
-            key = String(runExpr(childScope, keySrc));
-          } catch {
-            key = String(index);
+          let row = rows.get(key);
+          if (!row) {
+            structural = true;
+            const locals: Record<string, unknown> = {
+              [parsed.item]: item,
+              [parsed.index]: index,
+            };
+            const node = template.cloneNode(true) as Element;
+            const inst = ctx.instance.child();
+            const liveScope = scope.$child(locals);
+            const nodes = compileDetached(node, liveScope, { ...ctx, instance: inst });
+            row = { key, inst, nodes, scope: liveScope, item, index };
+            rows.set(key, row);
+          } else {
+            if (!Object.is(row.item, item)) {
+              row.item = item;
+              row.scope[parsed.item] = item;
+            }
+            if (row.index !== index) {
+              structural = true;
+              row.index = index;
+              row.scope[parsed.index] = index;
+            }
           }
-        } else {
-          key = String(index);
+          ordered.push(row);
         }
-        while (used.has(key)) key += "#" + index;
-        used.add(key);
-        nextKeys.push(key);
 
-        let row = rows.get(key);
-        if (!row) {
-          const node = template.cloneNode(true) as Element;
-          const inst = ctx.instance.child();
-          const liveScope = scope.$child(locals);
-          const nodes = compileDetached(node, liveScope, { ...ctx, instance: inst });
-          row = { key, inst, nodes, scope: liveScope, locals };
-          rows.set(key, row);
-        } else {
-          row.scope[parsed.item] = item;
-          row.scope[parsed.index] = index;
+        for (const [key, row] of rows) {
+          if (!used.has(key)) {
+            structural = true;
+            row.inst.destroy();
+            for (const live of row.nodes) live.parentNode?.removeChild(live);
+            rows.delete(key);
+          }
         }
-        ordered.push(row);
+
+        if (!structural) return;
+
+        let cursor: Node = start;
+        for (const row of ordered) {
+          for (const live of row.nodes) {
+            if (cursor.nextSibling !== live) {
+              end.parentNode?.insertBefore(live, cursor.nextSibling);
+            }
+            cursor = live;
+          }
+        }
       });
-
-      for (const [key, row] of rows) {
-        if (!used.has(key)) {
-          row.inst.destroy();
-          for (const live of row.nodes) live.parentNode?.removeChild(live);
-          rows.delete(key);
-        }
-      }
-
-      let cursor: Node = start;
-      for (const row of ordered) {
-        for (const live of row.nodes) {
-          if (cursor.nextSibling !== live) {
-            end.parentNode?.insertBefore(live, cursor.nextSibling);
-          }
-          cursor = live;
-        }
-      }
     },
   });
 }
@@ -431,17 +406,104 @@ function bindSlot(el: Element, scope: Scope, ctx: CompileContext): void {
 
 function addSite(
   ctx: CompileContext,
-  init: { kind: Site["kind"]; node: Node | null; label: string; run: (this: Site) => void },
+  init: { kind: Site["kind"]; node: Node | null; label: string; rank?: number; run: (this: Site) => void },
 ): Site {
   const site: Site = {
     id: ctx.engine.nextSiteId(),
     kind: init.kind,
     node: init.node,
     label: init.label,
+    rank: init.rank ?? rankOf(init.kind, false),
     run: () => undefined,
   };
   site.run = init.run.bind(site);
   ctx.instance.sites.push(site);
   site.run();
   return site;
+}
+
+function applyReactive(
+  site: Site,
+  ctx: CompileContext,
+  scope: Scope,
+  src: string,
+  apply: (value: unknown) => void,
+): void {
+  if (site.dead) return;
+  const engine = ctx.engine;
+  const plan = compileExpr(src);
+  if (site.linked && !engine.stale(site)) {
+    engine.stats.skipClock += 1;
+    return;
+  }
+
+  const read = (): unknown => {
+    if (plan.run) return plan.run((name) => scope.$lookup(name));
+    return runExpr(scope, src);
+  };
+
+  if (plan.stable && site.linked) {
+    let value: unknown;
+    try {
+      value = read();
+    } catch (error) {
+      console.error(error);
+      value = site.last;
+    }
+    engine.touch(site);
+    if (site.kind !== "show" && site.kind !== "repeat" && Object.is(value, site.last)) {
+      engine.stats.skipEqual += 1;
+      return;
+    }
+    site.last = value;
+    engine.stats.patch += 1;
+    apply(value);
+    return;
+  }
+
+  engine.startTrack();
+  let value: unknown;
+  try {
+    value = read();
+    if (site.kind === "repeat") touchList(value, ctx.engine);
+  } catch (error) {
+    console.error(error);
+    value = site.last;
+  } finally {
+    engine.commitTrack(site, engine.stopTrack());
+  }
+  if (site.kind !== "show" && site.kind !== "repeat" && Object.is(value, site.last)) {
+    engine.stats.skipEqual += 1;
+    return;
+  }
+  site.last = value;
+  engine.stats.patch += 1;
+  apply(value);
+}
+
+function keyFor(
+  item: unknown,
+  index: number,
+  keySrc: string | null,
+  itemName: string,
+  indexName: string,
+  scope: Scope,
+): string {
+  if (!keySrc) return String(index);
+  const trimmed = keySrc.trim();
+  if (trimmed === indexName) return String(index);
+  const prefix = itemName + ".";
+  if (trimmed.startsWith(prefix)) {
+    let cur: unknown = item;
+    for (const part of trimmed.slice(prefix.length).split(".")) {
+      if (cur == null) return String(index);
+      cur = (cur as Record<string, unknown>)[part];
+    }
+    return String(cur);
+  }
+  try {
+    return String(runExpr(scope.$child({ [itemName]: item, [indexName]: index }), trimmed));
+  } catch {
+    return String(index);
+  }
 }

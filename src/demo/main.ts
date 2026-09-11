@@ -41,7 +41,7 @@ const template = `
       <a href="#repeat">遍历</a>
       <a href="#slots">插槽</a>
       <a href="#bind">绑定</a>
-      <a href="#arch">架构</a>
+      <a href="#arch">分层</a>
       <a href="#api">API</a>
     </nav>
     <a class="nav-cta" href="https://cursor.com/codebase/sui-tan/tee">仓库</a>
@@ -53,10 +53,10 @@ const template = `
       <h1>点对点更新。</h1>
       <div class="hero-grid">
         <div>
-          <p class="lede">Tee 不用虚拟 DOM。正向映射表记下每个属性对应哪些真实节点，反向映射表记下更新该节点要读的属性。数据一变，只 patch 那些 Node。</p>
+          <p class="lede">Tee 不用虚拟 DOM。正向映射表记下每个属性对应哪些真实节点，反向映射表记下更新该节点要读的属性。调度走 Tee Strata：按等级跳过工作，而不是重画一棵树。</p>
           <div class="hero-actions">
             <a class="btn" href="#map">看全部能力</a>
-            <a class="btn ghost" href="#arch">看双向映射表</a>
+            <a class="btn ghost" href="#arch">看分层调度</a>
           </div>
         </div>
         <div class="hero-card">
@@ -86,7 +86,7 @@ const template = `
         <a href="#repeat"><small>05</small><h3>嵌套遍历</h3><p>部门套人员，t-key 复用已有 DOM。</p></a>
         <a href="#slots"><small>06</small><h3>自定义插槽</h3><p>具名 / 默认插槽在父作用域编译。</p></a>
         <a href="#bind"><small>07</small><h3>事件与表单</h3><p>t-on、t-bind、t-model、布尔属性。</p></a>
-        <a href="#arch"><small>08</small><h3>双向映射</h3><p>Forward 与 Reverse 在运行时公开可检视。</p></a>
+        <a href="#arch"><small>08</small><h3>Strata 分层</h3><p>C0–C3 编译，S0–S4 调度。上一拍的跳过次数公开可检视。</p></a>
       </div>
     </section>
 
@@ -278,13 +278,20 @@ const template = `
     </section>
 
     <section class="section" id="arch">
-      <h2>架构不是虚拟 DOM</h2>
-      <p class="kicker">写入属性 → 查正向表得到站点集合 → 按反向表读齐表达式 → 只 patch 这些真实 Node。列表用 key 挪节点，条件用注释锚点。没有 VNode，没有 diff 算法。</p>
-      <div class="flow">
-        <div><strong>1. 写入</strong><span class="muted">guest / price / 数组 push</span></div>
-        <div><strong>2. 正向</strong><span class="muted">property → Set&lt;Site&gt;</span></div>
-        <div><strong>3. 反向</strong><span class="muted">Site → 所需属性</span></div>
-        <div><strong>4. 点对点</strong><span class="muted">只改这些 Node</span></div>
+      <h2>Tee Strata</h2>
+      <p class="kicker">不是盲目微优化。模板先编成 IR 再生成函数；写入只查正向表，按 S0→S4 入队。computed 值没变就不通知下游；稳定路径冻结反向表；列表 key 没动就不挪节点。下面的计数是这一页自己跑出来的。</p>
+      <div class="flow strata">
+        <div><strong>S0 Derived</strong><span class="muted">computed，相等则切断下游</span></div>
+        <div><strong>S1 Leaf</strong><span class="muted">稳定路径，冻结反向表</span></div>
+        <div><strong>S2 Expr</strong><span class="muted">动态表达式，按需重连</span></div>
+        <div><strong>S3 Watch</strong><span class="muted">观察者，数据格落定后</span></div>
+        <div><strong>S4 Structure</strong><span class="muted">t-show / t-repeat 最后提交</span></div>
+      </div>
+      <div class="ribbon strata-ribbon" style="margin-top:18px">
+        <div><span>上一拍调度</span><b id="stat-run">0</b></div>
+        <div><span>时钟跳过</span><b id="stat-clock">0</b></div>
+        <div><span>值未变跳过</span><b id="stat-equal">0</b></div>
+        <div><span>实补 DOM</span><b id="stat-patch">0</b></div>
       </div>
       <div class="maps" style="margin-top:18px">
         <section>
@@ -316,6 +323,7 @@ const template = `
           <tr><td><code>t-model</code></td><td>输入回写到路径。</td></tr>
           <tr><td><code>t-slot</code> / <code>&lt;slot&gt;</code></td><td>具名与默认插槽。</td></tr>
           <tr><td><code>app.maps()</code></td><td>导出当前正向 / 反向表快照。</td></tr>
+          <tr><td><code>app.stats()</code></td><td>上一拍 Strata 计数：调度、跳过、实补。</td></tr>
         </tbody>
       </table>
     </section>
@@ -347,7 +355,7 @@ const app = Tee.create({
     form: { email: "", agree: false },
     card: { title: "点对点工程师", role: "Tee runtime", bio: "不写 VNode，只修真节点。" },
     faqs: [
-      { id: 1, q: "为什么不是 Vue？", a: "没有模板编译成 VNode，也没有响应式再走 patch。映射表直接指向 Node。" },
+      { id: 1, q: "为什么不是 Vue？", a: "没有模板编译成 VNode，也没有响应式再走 patch。映射表直接指向 Node。调度是 Tee Strata，不是组件树重渲染。" },
       { id: 2, q: "为什么不是 React？", a: "没有函数组件渲染和 Fiber 调和。状态变了不去重画子树。" },
       { id: 3, q: "列表怎么更新？", a: "t-repeat 按 t-key 移动已有元素，新增则编译新实例，不是虚拟列表 diff。" },
     ],
@@ -507,6 +515,15 @@ function paintMaps() {
   if (forwardEl) forwardEl.textContent = forward || "（暂无）";
   if (reverseEl) reverseEl.textContent = reverse || "（暂无）";
   if (countEl) countEl.textContent = String(snap.reverse.length);
+  const stats = app.stats();
+  const runEl = document.getElementById("stat-run");
+  const clockEl = document.getElementById("stat-clock");
+  const equalEl = document.getElementById("stat-equal");
+  const patchEl = document.getElementById("stat-patch");
+  if (runEl) runEl.textContent = String(stats.run);
+  if (clockEl) clockEl.textContent = String(stats.skipClock);
+  if (equalEl) equalEl.textContent = String(stats.skipEqual);
+  if (patchEl) patchEl.textContent = String(stats.patch);
 }
 
 app.onFlush(paintMaps);
