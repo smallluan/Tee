@@ -732,6 +732,33 @@ function directBindingProp(binding: FastRowBinding, scope: Scope): string | null
   return id ? `${id}.${binding.directPath[binding.directPath.length - 1]}` : null;
 }
 
+type SingleDirectRowSite = Site & {
+  engine: Engine;
+  binding: FastRowBinding;
+  target: Node;
+  scope: Scope;
+  value: unknown;
+  initialized: boolean;
+};
+
+function runSingleDirectRowSite(this: SingleDirectRowSite): void {
+  if (this.dead) return;
+  if (!this.linked) {
+    const prop = directBindingProp(this.binding, this.scope);
+    if (prop == null) return;
+    this.engine.maps.linkOne(this, prop, this.binding.directPath!.at(-1)!);
+    this.linked = true;
+  }
+  const next = readFastBinding(this.binding, this.scope);
+  if (!this.initialized || !Object.is(next, this.value)) {
+    this.value = applyFastBinding(this.binding, this.target, next);
+    this.engine.stats.patch += 1;
+  } else {
+    this.engine.stats.skipEqual += 1;
+  }
+  this.initialized = true;
+}
+
 function addSingleDirectRowSite(
   engine: Engine,
   instance: Instance,
@@ -740,32 +767,20 @@ function addSingleDirectRowSite(
   node: Node,
   scope: Scope,
 ): void {
-  let value: unknown;
-  let initialized = false;
-  const site: Site = {
+  const site: SingleDirectRowSite = {
     id: engine.nextSiteId(),
     kind: "attr",
     node: root,
     label: "repeat row bindings",
     rank: Rank.Leaf,
     exact: true,
-    run() {
-      if (site.dead) return;
-      if (!site.linked) {
-        const prop = directBindingProp(binding, scope);
-        if (prop == null) return;
-        engine.maps.linkOne(site, prop, binding.directPath!.at(-1)!);
-        site.linked = true;
-      }
-      const next = readFastBinding(binding, scope);
-      if (!initialized || !Object.is(next, value)) {
-        value = applyFastBinding(binding, node, next);
-        engine.stats.patch += 1;
-      } else {
-        engine.stats.skipEqual += 1;
-      }
-      initialized = true;
-    },
+    engine,
+    binding,
+    target: node,
+    scope,
+    value: undefined,
+    initialized: false,
+    run: runSingleDirectRowSite,
   };
   instance.sites.push(site);
   site.run();
