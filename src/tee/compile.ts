@@ -1323,14 +1323,7 @@ function bindSlot(el: Element, scope: Scope, ctx: CompileContext): void {
 
 function addSite(
   ctx: CompileContext,
-  init: {
-    kind: Site["kind"];
-    node: Node | null;
-    label: string;
-    rank?: number;
-    dispose?: () => void;
-    run: (this: Site) => void;
-  },
+  init: { kind: Site["kind"]; node: Node | null; label: string; rank?: number; run: (this: Site) => void },
 ): Site {
   const site: Site = {
     id: ctx.engine.nextSiteId(),
@@ -1338,7 +1331,6 @@ function addSite(
     node: init.node,
     label: init.label,
     rank: init.rank ?? rankOf(init.kind, false),
-    dispose: init.dispose,
     run: () => undefined,
   };
   site.run = init.run.bind(site);
