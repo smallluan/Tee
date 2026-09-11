@@ -980,7 +980,7 @@ function createRepeatRow(
   ctx: CompileContext,
   render: RowRenderer,
 ): RepeatRow {
-  const inst = render.fastScope ? ctx.instance.child(true, false) : ctx.instance.child();
+  const inst = ctx.instance.child(Boolean(render.fastScope));
   const liveScope = render.fastScope
     ? createFastRepeatScope(scope, parsed.item, parsed.index, item, index, inst)
     : createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst);
@@ -1670,10 +1670,6 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
     node: start,
     label: `t-repeat ${stmt}`,
     rank: Rank.Structure,
-    dispose() {
-      for (const row of rows.values()) row.inst.destroy();
-      rows.clear();
-    },
     run() {
       applyReactive(this, ctx, scope, parsed.list, (list) => {
         orderedRows = reconcileRepeat(
