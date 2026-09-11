@@ -53,6 +53,14 @@ export function hydrateFragment(fragment: DocumentFragment | Node, scope: Scope,
   for (const child of [...fragment.childNodes]) hydrate(child, scope, ctx);
 }
 
+/** Compile a node that may replace itself (custom tags). Keep it in a fragment so replacements stay reachable. */
+function compileDetached(node: Node, scope: Scope, ctx: CompileContext): Node[] {
+  const holder = document.createDocumentFragment();
+  holder.append(node);
+  hydrate(node, scope, ctx);
+  return [...holder.childNodes];
+}
+
 function bindText(text: Text, scope: Scope, ctx: CompileContext): void {
   const raw = text.textContent ?? "";
   if (!raw.includes("{{")) return;
@@ -218,7 +226,7 @@ function bindShow(el: Element, scope: Scope, ctx: CompileContext): void {
   el.replaceWith(anchor);
 
   let visible = false;
-  let current: { inst: Instance; node: Node } | null = null;
+  let current: { inst: Instance; nodes: Node[] } | null = null;
 
   addSite(ctx, {
     kind: "show",
@@ -237,13 +245,13 @@ function bindShow(el: Element, scope: Scope, ctx: CompileContext): void {
       if (on && !visible) {
         const node = template.cloneNode(true) as Element;
         const inst = ctx.instance.child();
-        hydrate(node, scope, { ...ctx, instance: inst });
-        anchor.parentNode?.insertBefore(node, anchor);
-        current = { inst, node };
+        const nodes = compileDetached(node, scope, { ...ctx, instance: inst });
+        for (const live of nodes) anchor.parentNode?.insertBefore(live, anchor);
+        current = { inst, nodes };
         visible = true;
       } else if (!on && visible && current) {
         current.inst.destroy();
-        if (current.node.parentNode) current.node.parentNode.removeChild(current.node);
+        for (const live of current.nodes) live.parentNode?.removeChild(live);
         current = null;
         visible = false;
       }
@@ -263,7 +271,7 @@ function bindRepeat(el: Element, scope: Scope, ctx: CompileContext): void {
   el.replaceWith(start);
   start.parentNode?.insertBefore(end, start.nextSibling);
 
-  type Row = { key: string; inst: Instance; node: Element; scope: Scope; locals: Record<string, unknown> };
+  type Row = { key: string; inst: Instance; nodes: Node[]; scope: Scope; locals: Record<string, unknown> };
   const rows = new Map<string, Row>();
 
   addSite(ctx, {
@@ -313,8 +321,8 @@ function bindRepeat(el: Element, scope: Scope, ctx: CompileContext): void {
           const node = template.cloneNode(true) as Element;
           const inst = ctx.instance.child();
           const liveScope = scope.$child(locals);
-          hydrate(node, liveScope, { ...ctx, instance: inst });
-          row = { key, inst, node, scope: liveScope, locals };
+          const nodes = compileDetached(node, liveScope, { ...ctx, instance: inst });
+          row = { key, inst, nodes, scope: liveScope, locals };
           rows.set(key, row);
         } else {
           row.scope[parsed.item] = item;
@@ -326,17 +334,19 @@ function bindRepeat(el: Element, scope: Scope, ctx: CompileContext): void {
       for (const [key, row] of rows) {
         if (!used.has(key)) {
           row.inst.destroy();
-          if (row.node.parentNode) row.node.parentNode.removeChild(row.node);
+          for (const live of row.nodes) live.parentNode?.removeChild(live);
           rows.delete(key);
         }
       }
 
       let cursor: Node = start;
       for (const row of ordered) {
-        if (cursor.nextSibling !== row.node) {
-          end.parentNode?.insertBefore(row.node, cursor.nextSibling);
+        for (const live of row.nodes) {
+          if (cursor.nextSibling !== live) {
+            end.parentNode?.insertBefore(live, cursor.nextSibling);
+          }
+          cursor = live;
         }
-        cursor = row.node;
       }
     },
   });
@@ -398,9 +408,7 @@ function bindTag(host: Element, def: TagDef, parentScope: Scope, ctx: CompileCon
     }
   }
 
-  const parent = host.parentNode;
-  if (parent) parent.insertBefore(mount, host);
-  host.remove();
+  host.replaceWith(mount);
 }
 
 function bindSlot(el: Element, scope: Scope, ctx: CompileContext): void {
