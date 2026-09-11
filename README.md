@@ -45,7 +45,7 @@ npm install
 npm run dev
 ```
 
-浏览器打开控制台里 Vite 给出的地址（默认 `http://127.0.0.1:43151`）。演示是一间茶寮点单板：茶单是嵌套遍历，卡片用了自定义插槽，右侧能看到运行中的正向 / 反向映射表。
+浏览器打开 Vite 给出的地址（默认 `http://127.0.0.1:43151`）。首页是用 Tee 自己写的框架介绍站：现场插值、计算属性、观察者、插槽、条件显示、嵌套遍历，以及运行中的双向映射表。
 
 ```bash
 npm test
@@ -101,7 +101,7 @@ src/tee/engine.ts    依赖记录、通知、按站点批处理
 src/tee/observe.ts   对真实对象做路径通知（不是 VNode）
 src/tee/compile.ts   模板 → 站点，插值 / 条件 / 遍历 / 插槽
 src/tee/scope.ts     计算属性、观察者、作用域链
-src/demo/            茶寮演示
+src/demo/            用 Tee 写的框架介绍站
 ```
 
 公开入口：`Tee.create`、`Tee.define`、`Tee.version`。
