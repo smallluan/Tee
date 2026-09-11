@@ -1,0 +1,9 @@
+<template>
+  <p class="hi">{{ msg }}</p>
+</template>
+
+<script>
+export default {
+  data: () => ({ msg: "你好" }),
+};
+</script>

@@ -1,4 +1,4 @@
-import { hydrateFragment, parseTemplate, type CompileContext } from "./compile";
+import { mountTemplate, type CompileContext } from "./compile";
 import { Engine } from "./engine";
 import { Instance } from "./instance";
 import { createRootScope, type Scope } from "./scope";
@@ -6,7 +6,7 @@ import type { MapSnapshot, TagDef, TeeOptions } from "./types";
 
 const registry = new Map<string, TagDef>();
 
-export const version = "0.3.0";
+export const version = "0.4.0";
 
 export function define(name: string, def: TagDef): TagDef {
   registry.set(name.toLowerCase(), def);
@@ -36,17 +36,17 @@ export class TeeApp {
     options.setup?.(this.scope);
 
     const host = resolveEl(options.el);
-    const html = options.template ?? host.innerHTML;
+    const html = options.template ?? (options.render ? "" : host.innerHTML);
     host.innerHTML = "";
-    const fragment = parseTemplate(html);
     const tags = options.tags ?? {};
     const ctx: CompileContext = {
       engine: this.engine,
       instance: this.instance,
       lookup: (tag) => tags[tag] ?? registry.get(tag),
+      scope: this.scope,
     };
-    hydrateFragment(fragment, this.scope, ctx);
-    host.append(fragment);
+    if (options.render) options.render(ctx, host);
+    else mountTemplate(html, host, this.scope, ctx);
     this.el = host;
     options.ready?.(this.scope);
   }

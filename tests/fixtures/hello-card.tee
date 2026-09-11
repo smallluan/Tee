@@ -1,0 +1,12 @@
+<template>
+  <article class="card">
+    <header><slot name="title">untitled</slot></header>
+    <div class="body"><slot>empty</slot></div>
+  </article>
+</template>
+
+<script>
+export default {
+  tag: "hello-card",
+};
+</script>

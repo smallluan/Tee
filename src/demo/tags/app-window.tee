@@ -1,0 +1,16 @@
+<template>
+  <section class="window">
+    <header>
+      <b><slot name="title">未命名窗口</slot></b>
+      <span class="muted">自定义标签</span>
+    </header>
+    <div class="tools"><slot name="tools"></slot></div>
+    <div class="body"><slot>空内容</slot></div>
+  </section>
+</template>
+
+<script>
+export default {
+  tag: "app-window",
+};
+</script>

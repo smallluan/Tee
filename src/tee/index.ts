@@ -5,3 +5,6 @@ export { Engine } from "./engine";
 export { Rank, STRATA, rankOf } from "./strata";
 export type { FlushStats } from "./strata";
 export { compileExpr, compileStmt, evalIR } from "./ir";
+export { parseHTML } from "./html";
+export { mountAST, mountTemplate } from "./compile";
+export { parseSFC, compileSFC } from "./sfc";

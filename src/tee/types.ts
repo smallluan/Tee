@@ -42,7 +42,9 @@ export interface MethodMap {
 }
 
 export interface TagDef {
-  template: string;
+  template?: string;
+  render?: (ctx: import("./compile").CompileContext, parent: Node) => void;
+  tag?: string;
   data?: () => Record<string, unknown>;
   computed?: ComputedMap;
   watch?: Record<string, WatchSource>;
@@ -53,6 +55,7 @@ export interface TagDef {
 export interface TeeOptions {
   el?: string | Element;
   template?: string;
+  render?: (ctx: import("./compile").CompileContext, parent: Node) => void;
   data?: Record<string, unknown> | (() => Record<string, unknown>);
   computed?: ComputedMap;
   watch?: Record<string, WatchSource>;

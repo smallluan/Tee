@@ -1,0 +1,10 @@
+<template>
+  <button class="btn" t-on:click="n = n + 1">独立组件状态：{{ n }}</button>
+</template>
+
+<script>
+export default {
+  tag: "mini-counter",
+  data: () => ({ n: 0 }),
+};
+</script>

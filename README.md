@@ -122,17 +122,57 @@ Tee.create({
 
 `app.maps()` 导出当前正向 / 反向表。`app.stats()` 导出上一拍 Strata 计数：`notify` / `mark` / `run` / `skipClock` / `skipEqual` / `relink` / `patch`。
 
+## `.tee` 单文件组件
+
+Vue 的 `.vue` 不是浏览器认识的格式。Vite 的 `@vitejs/plugin-vue` 在构建期拦截这个文件，用编译器拆成三块：
+
+1. `<template>` → 编成 render 函数
+2. `<script>` → 普通 JS 模块，把 render 挂上去
+3. `<style>` → CSS 模块或注入的 `<style>` 标签
+
+浏览器最后只拿到 JS / CSS。解析规则完全由框架自己定。
+
+Tee 做同样的事，文件扩展名是 `.tee`，模板语法是自己的 `{{ }}` / `t-show` / `t-repeat`，不是 Vue 的 `v-`。`vite-plugin-tee` 在构建期把 `<template>` 编成 AST 工厂（不再运行时 `innerHTML`），`<script>` 导出选项对象，`tag` 字段会自动 `Tee.define`。
+
+```tee
+<template>
+  <p>{{ guest }}</p>
+  <button t-on:click="count = count + 1">{{ count }}</button>
+</template>
+
+<script lang="ts">
+export default {
+  tag: "hello-box",
+  data: () => ({ guest: "访客", count: 0 }),
+};
+</script>
+```
+
+```ts
+import { tee } from "tee/plugin";
+import App from "./App.tee";
+import "./tags/hello-box.tee";
+
+export default defineConfig({ plugins: [tee()] });
+Tee.create({ el: "#app", ...App });
+```
+
+字符串模板 `Tee.create({ template: "..." })` 仍然可用，测试和嵌入场景不用过 Vite。
+
 ## 源码地图
 
 ```
 src/tee/maps.ts      双向映射表（依赖集未变则不 relink）
 src/tee/strata.ts    等级、时钟格子、Strata 计数
 src/tee/ir.ts        表达式 IR + 代码生成
+src/tee/html.ts      模板 HTML → AST
+src/tee/sfc.ts       .tee 拆块 + 编成模块
+src/tee/plugin.ts    Vite 插件
 src/tee/engine.ts    通知、按等级冲洗
 src/tee/observe.ts   对真实对象做路径通知（不是 VNode）
-src/tee/compile.ts   模板 → 站点，插值 / 条件 / 遍历 / 插槽
+src/tee/compile.ts   AST / 字符串模板 → 站点
 src/tee/scope.ts     计算属性、观察者、作用域链
-src/demo/            用 Tee 写的框架介绍站
+src/demo/            用 .tee 写的框架介绍站
 ```
 
 公开入口：`Tee.create`、`Tee.define`、`Tee.version`。

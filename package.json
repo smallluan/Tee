@@ -1,12 +1,13 @@
 {
   "name": "tee",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Tee — a point-to-point reactive frontend framework driven by bidirectional DOM maps, not a virtual DOM.",
   "type": "module",
   "main": "./src/tee/index.ts",
   "module": "./src/tee/index.ts",
   "exports": {
-    ".": "./src/tee/index.ts"
+    ".": "./src/tee/index.ts",
+    "./plugin": "./src/tee/plugin.ts"
   },
   "scripts": {
     "dev": "vite --port 43151 --host 0.0.0.0",

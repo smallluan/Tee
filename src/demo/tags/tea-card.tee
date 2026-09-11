@@ -1,0 +1,13 @@
+<template>
+  <article class="tea-card">
+    <div class="badge"><slot name="badge">—</slot></div>
+    <slot></slot>
+    <div><slot name="actions"></slot></div>
+  </article>
+</template>
+
+<script>
+export default {
+  tag: "tea-card",
+};
+</script>

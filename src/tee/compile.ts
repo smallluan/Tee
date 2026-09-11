@@ -1,5 +1,6 @@
 import { display, isBooleanAttr, parseRepeat, splitInterpolation, writeText } from "./expr";
 import type { Engine } from "./engine";
+import { attrValue, parseHTML, staticAttrs, type ElNode, type TmplNode } from "./html";
 import { compileExpr } from "./ir";
 import { Instance } from "./instance";
 import { touchList } from "./observe";
@@ -13,6 +14,15 @@ export interface CompileContext {
   lookup: (tag: string) => TagDef | undefined;
   fillers?: Record<string, Node[]>;
   parentScope?: Scope;
+  scope?: Scope;
+}
+
+export function mountTemplate(html: string, parent: Node, scope: Scope, ctx: CompileContext): void {
+  mountAST(parseHTML(html), parent, scope, ctx);
+}
+
+export function mountAST(nodes: TmplNode[], parent: Node, scope: Scope, ctx: CompileContext): void {
+  for (const node of nodes) mountNode(node, parent, scope, ctx);
 }
 
 export function parseTemplate(html: string): DocumentFragment {
@@ -506,4 +516,233 @@ function keyFor(
   } catch {
     return String(index);
   }
+}
+
+function mountNode(node: TmplNode, parent: Node, scope: Scope, ctx: CompileContext): void {
+  if (ctx.instance.detached) return;
+  if (node.t === "text") {
+    parent.appendChild(document.createTextNode(node.value));
+    return;
+  }
+  if (node.t === "live") {
+    const text = document.createTextNode("");
+    parent.appendChild(text);
+    addSite(ctx, {
+      kind: "text",
+      node: text,
+      label: `{{ ${node.src} }}`,
+      rank: rankOf("text", compileExpr(node.src).stable),
+      run() {
+        applyReactive(this, ctx, scope, node.src, (value) => writeText(text, value));
+      },
+    });
+    return;
+  }
+  if (attrValue(node.attrs, "repeat") != null) {
+    mountRepeatNode(node, parent, scope, ctx);
+    return;
+  }
+  if (attrValue(node.attrs, "show") != null) {
+    mountShowNode(node, parent, scope, ctx);
+    return;
+  }
+  if (node.tag === "slot") {
+    mountSlotNode(node, parent, scope, ctx);
+    return;
+  }
+  if (ctx.lookup(node.tag)) {
+    mountTagNode(node, parent, scope, ctx);
+    return;
+  }
+  mountElement(node, parent, scope, ctx);
+}
+
+function mountElement(node: ElNode, parent: Node, scope: Scope, ctx: CompileContext): void {
+  const el = document.createElement(node.tag);
+  for (const attr of staticAttrs(node.attrs)) el.setAttribute(attr.name, attr.value);
+  for (const attr of node.attrs) {
+    if (attr.kind === "on") bindEvent(el, attr.event, attr.value, scope);
+    else if (attr.kind === "bind") bindAttr(el, attr.name, attr.value, scope, ctx);
+    else if (attr.kind === "model") bindModel(el, attr.value, scope, ctx);
+  }
+  mountAST(node.children, el, scope, ctx);
+  parent.appendChild(el);
+}
+
+function mountShowNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileContext): void {
+  const src = attrValue(node.attrs, "show") ?? "";
+  const stripped: ElNode = {
+    ...node,
+    attrs: node.attrs.filter((attr) => attr.kind !== "show"),
+  };
+  const anchor = document.createComment("t-show");
+  parent.appendChild(anchor);
+  let visible = false;
+  let current: { inst: Instance; nodes: Node[] } | null = null;
+  addSite(ctx, {
+    kind: "show",
+    node: anchor,
+    label: `t-show ${src}`,
+    rank: Rank.Structure,
+    run() {
+      applyReactive(this, ctx, scope, src, (value) => {
+        const on = Boolean(value);
+        if (on === visible) return;
+        if (on && !visible) {
+          const inst = ctx.instance.child();
+          const holder = document.createDocumentFragment();
+          mountElement(stripped, holder, scope, { ...ctx, instance: inst });
+          const nodes = [...holder.childNodes];
+          for (const live of nodes) anchor.parentNode?.insertBefore(live, anchor);
+          current = { inst, nodes };
+          visible = true;
+        } else if (!on && visible && current) {
+          current.inst.destroy();
+          for (const live of current.nodes) live.parentNode?.removeChild(live);
+          current = null;
+          visible = false;
+        }
+      });
+    },
+  });
+}
+
+function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileContext): void {
+  const stmt = attrValue(node.attrs, "repeat") ?? "";
+  const keySrc = attrValue(node.attrs, "key") ?? null;
+  const stripped: ElNode = {
+    ...node,
+    attrs: node.attrs.filter((attr) => attr.kind !== "repeat" && attr.kind !== "key"),
+  };
+  const parsed = parseRepeat(stmt);
+  const start = document.createComment("t-repeat");
+  const end = document.createComment("/t-repeat");
+  parent.appendChild(start);
+  parent.appendChild(end);
+
+  type Row = {
+    key: string;
+    inst: Instance;
+    nodes: Node[];
+    scope: Scope;
+    item: unknown;
+    index: number;
+  };
+  const rows = new Map<string, Row>();
+
+  addSite(ctx, {
+    kind: "repeat",
+    node: start,
+    label: `t-repeat ${stmt}`,
+    rank: Rank.Structure,
+    run() {
+      applyReactive(this, ctx, scope, parsed.list, (list) => {
+        const items = Array.isArray(list) ? list : [];
+        const used = new Set<string>();
+        const ordered: Row[] = [];
+        let structural = false;
+        for (let index = 0; index < items.length; index++) {
+          const item = items[index];
+          let key = keyFor(item, index, keySrc, parsed.item, parsed.index, scope);
+          while (used.has(key)) key += "#" + index;
+          used.add(key);
+          let row = rows.get(key);
+          if (!row) {
+            structural = true;
+            const inst = ctx.instance.child();
+            const liveScope = scope.$child({ [parsed.item]: item, [parsed.index]: index });
+            const holder = document.createDocumentFragment();
+            mountNode(stripped, holder, liveScope, { ...ctx, instance: inst });
+            row = { key, inst, nodes: [...holder.childNodes], scope: liveScope, item, index };
+            rows.set(key, row);
+          } else {
+            if (!Object.is(row.item, item)) {
+              row.item = item;
+              row.scope[parsed.item] = item;
+            }
+            if (row.index !== index) {
+              structural = true;
+              row.index = index;
+              row.scope[parsed.index] = index;
+            }
+          }
+          ordered.push(row);
+        }
+        for (const [key, row] of rows) {
+          if (!used.has(key)) {
+            structural = true;
+            row.inst.destroy();
+            for (const live of row.nodes) live.parentNode?.removeChild(live);
+            rows.delete(key);
+          }
+        }
+        if (!structural) return;
+        let cursor: Node = start;
+        for (const row of ordered) {
+          for (const live of row.nodes) {
+            if (cursor.nextSibling !== live) end.parentNode?.insertBefore(live, cursor.nextSibling);
+            cursor = live;
+          }
+        }
+      });
+    },
+  });
+}
+
+function mountTagNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileContext): void {
+  const def = ctx.lookup(node.tag);
+  if (!def) return;
+  const fillers = collectFillersAst(node.children, scope, ctx);
+  const inst = ctx.instance.child();
+  let innerScope = scope;
+  if (def.data || def.computed || def.methods || def.watch) {
+    innerScope = createRootScope(ctx.engine, def.data ? def.data() : {}, def.computed, def.methods, def.watch, inst);
+    inst.scope = innerScope;
+    def.setup?.(innerScope);
+  }
+  const innerCtx: CompileContext = { ...ctx, instance: inst, fillers, parentScope: scope, scope: innerScope };
+  const mount = document.createDocumentFragment();
+  if (def.render) def.render(innerCtx, mount);
+  else if (def.template) mountTemplate(def.template, mount, innerScope, innerCtx);
+  const first = mount.firstElementChild;
+  if (first) {
+    for (const attr of staticAttrs(node.attrs)) {
+      if (attr.name === "class" && first.getAttribute("class")) {
+        first.setAttribute("class", `${first.getAttribute("class")} ${attr.value}`);
+      } else if (!first.hasAttribute(attr.name)) first.setAttribute(attr.name, attr.value);
+    }
+  }
+  parent.append(...mount.childNodes);
+}
+
+function mountSlotNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileContext): void {
+  const name = staticAttrs(node.attrs).find((attr) => attr.name === "name")?.value || "default";
+  const fill = ctx.fillers?.[name];
+  if (fill && fill.length) {
+    for (const child of fill) parent.appendChild(child);
+    return;
+  }
+  mountAST(node.children, parent, scope, ctx);
+}
+
+function collectFillersAst(children: TmplNode[], scope: Scope, ctx: CompileContext): Record<string, Node[]> {
+  const fillers: Record<string, Node[]> = { default: [] };
+  for (const child of children) {
+    if (child.t === "el" && attrValue(child.attrs, "slot") != null) {
+      const name = attrValue(child.attrs, "slot") || "default";
+      const dest = document.createDocumentFragment();
+      if (child.tag === "template") mountAST(child.children, dest, scope, ctx);
+      else {
+        const stripped: ElNode = { ...child, attrs: child.attrs.filter((attr) => attr.kind !== "slot") };
+        mountNode(stripped, dest, scope, ctx);
+      }
+      fillers[name] = [...dest.childNodes];
+      continue;
+    }
+    if (child.t === "text" && !child.value.trim()) continue;
+    const dest = document.createDocumentFragment();
+    mountNode(child, dest, scope, ctx);
+    fillers.default.push(...dest.childNodes);
+  }
+  return fillers;
 }
