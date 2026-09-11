@@ -708,6 +708,43 @@ function directBindingProp(binding: FastRowBinding, scope: Scope): string | null
   return id ? `${id}.${binding.directPath[binding.directPath.length - 1]}` : null;
 }
 
+function addSingleDirectRowSite(
+  ctx: CompileContext,
+  root: Element,
+  binding: FastRowBinding,
+  node: Node,
+  scope: Scope,
+): void {
+  let value: unknown;
+  let initialized = false;
+  const site: Site = {
+    id: ctx.engine.nextSiteId(),
+    kind: "attr",
+    node: root,
+    label: "repeat row bindings",
+    rank: Rank.Leaf,
+    run() {
+      if (site.dead) return;
+      if (!site.linked) {
+        const prop = directBindingProp(binding, scope);
+        if (prop == null) return;
+        ctx.engine.maps.linkOne(site, prop, binding.directPath!.at(-1)!);
+        site.linked = true;
+      }
+      const next = readFastBinding(binding, scope);
+      if (!initialized || !Object.is(next, value)) {
+        value = applyFastBinding(binding, node, next);
+        ctx.engine.stats.patch += 1;
+      } else {
+        ctx.engine.stats.skipEqual += 1;
+      }
+      initialized = true;
+    },
+  };
+  ctx.instance.sites.push(site);
+  site.run();
+}
+
 function addDirectRowSite(
   ctx: CompileContext,
   root: Element,
@@ -768,7 +805,6 @@ function fastRowRenderer(
     }
     const root = cached.root.cloneNode(true) as Element;
     const reactiveBindings = cached.reactiveBindings;
-    const bindingNodes = reactiveBindings.map((binding) => nodeAtPath(root, binding.path));
     for (const event of cached.events) {
       bindFastEvent(nodeAtPath(root, event.path) as Element, event.event, event.src, scope, event.mods);
     }
@@ -778,9 +814,21 @@ function fastRowRenderer(
       applyFastBinding(binding, nodeAtPath(root, binding.path), readFastBinding(binding, scope));
     }
 
-    if (reactiveBindings.length && reactiveBindings.every((binding) => binding.directPath)) {
-      addDirectRowSite(ctx, root, reactiveBindings, bindingNodes, scope);
+    if (reactiveBindings.length === 1 && reactiveBindings[0].directPath) {
+      addSingleDirectRowSite(
+        ctx,
+        root,
+        reactiveBindings[0],
+        nodeAtPath(root, reactiveBindings[0].path),
+        scope,
+      );
     } else if (reactiveBindings.length) {
+      const bindingNodes = reactiveBindings.map((binding) => nodeAtPath(root, binding.path));
+      if (reactiveBindings.every((binding) => binding.directPath)) {
+        addDirectRowSite(ctx, root, reactiveBindings, bindingNodes, scope);
+        parent.appendChild(root);
+        return;
+      }
       const values = new Array<unknown>(reactiveBindings.length);
       let initialized = false;
       addSite(ctx, {

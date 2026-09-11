@@ -41,4 +41,25 @@ describe("TwinMap", () => {
     expect(maps.linkIfChanged(a, ["title", "name"])).toBe(true);
     expect([...maps.propsFor(a)].sort()).toEqual(["name", "title"]);
   });
+
+  it("links and unlinks a direct singleton in both directions", () => {
+    const maps = new TwinMap();
+    const a = site(1);
+    const b = site(2);
+
+    maps.linkOne(a, "row.name", "name");
+    maps.link(b, ["row.name"]);
+
+    expect([...maps.sitesFor("row.name")].map((entry) => entry.id).sort()).toEqual([1, 2]);
+    expect([...maps.propsFor(a)]).toEqual(["row.name"]);
+    expect([...maps.debugFor(a)]).toEqual(["name"]);
+
+    maps.linkOne(a, "row.title", "title");
+    expect([...maps.sitesFor("row.name")].map((entry) => entry.id)).toEqual([2]);
+    expect([...maps.sitesFor("row.title")].map((entry) => entry.id)).toEqual([1]);
+
+    maps.unlink(a);
+    expect(maps.sitesFor("row.title").size).toBe(0);
+    expect(maps.reverse.has(a)).toBe(false);
+  });
 });

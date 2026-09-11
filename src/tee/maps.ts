@@ -3,6 +3,8 @@ import type { PropKey, Site } from "./types";
 const EMPTY_SITES: ReadonlySet<Site> = new Set();
 const EMPTY_PROPS: ReadonlySet<PropKey> = new Set();
 type SiteBucket = Site | Set<Site>;
+type PropBucket = PropKey | Set<PropKey>;
+type DebugBucket = string | Set<string>;
 
 /**
  * TwinMap is Tee's only update index.
@@ -13,8 +15,8 @@ type SiteBucket = Site | Set<Site>;
  */
 export class TwinMap {
   readonly forward = new Map<PropKey, SiteBucket>();
-  readonly reverse = new Map<Site, Set<PropKey>>();
-  readonly debug = new Map<Site, Set<string>>();
+  readonly reverse = new Map<Site, PropBucket>();
+  readonly debug = new Map<Site, DebugBucket>();
 
   link(site: Site, props: Iterable<PropKey>, debugProps?: Iterable<string>): void {
     this.unlink(site);
@@ -33,10 +35,24 @@ export class TwinMap {
     }
   }
 
+  linkOne(site: Site, prop: PropKey, debugProp = prop): void {
+    this.unlink(site);
+    this.reverse.set(site, prop);
+    this.debug.set(site, debugProp);
+    const bucket = this.forward.get(prop);
+    if (!bucket) {
+      this.forward.set(prop, site);
+    } else if (bucket instanceof Set) {
+      bucket.add(site);
+    } else if (bucket !== site) {
+      this.forward.set(prop, new Set([bucket, site]));
+    }
+  }
+
   /** Relink only when the reverse dep set actually changed. */
   linkIfChanged(site: Site, props: Iterable<PropKey>, debugProps?: Iterable<string>): boolean {
     const prev = this.reverse.get(site);
-    if (prev && sameSet(prev, props)) {
+    if (prev instanceof Set && sameSet(prev, props)) {
       if (debugProps) this.debug.set(site, new Set(debugProps));
       return false;
     }
@@ -47,16 +63,14 @@ export class TwinMap {
   unlink(site: Site): void {
     const prev = this.reverse.get(site);
     if (!prev) return;
+    if (typeof prev === "string") {
+      this.unlinkForward(prev, site);
+      this.reverse.delete(site);
+      this.debug.delete(site);
+      return;
+    }
     for (const prop of prev) {
-      const bucket = this.forward.get(prop);
-      if (!bucket) continue;
-      if (bucket instanceof Set) {
-        bucket.delete(site);
-        if (bucket.size === 0) this.forward.delete(prop);
-        else if (bucket.size === 1) this.forward.set(prop, bucket.values().next().value as Site);
-      } else if (bucket === site) {
-        this.forward.delete(prop);
-      }
+      this.unlinkForward(prop, site);
     }
     this.reverse.delete(site);
     this.debug.delete(site);
@@ -79,13 +93,33 @@ export class TwinMap {
   }
 
   propsFor(site: Site): ReadonlySet<PropKey> {
-    return this.reverse.get(site) ?? EMPTY_PROPS;
+    const bucket = this.reverse.get(site);
+    if (!bucket) return EMPTY_PROPS;
+    return typeof bucket === "string" ? new Set([bucket]) : bucket;
+  }
+
+  debugFor(site: Site): ReadonlySet<string> {
+    const bucket = this.debug.get(site);
+    if (!bucket) return EMPTY_PROPS;
+    return typeof bucket === "string" ? new Set([bucket]) : bucket;
   }
 
   clear(): void {
     this.forward.clear();
     this.reverse.clear();
     this.debug.clear();
+  }
+
+  private unlinkForward(prop: PropKey, site: Site): void {
+    const bucket = this.forward.get(prop);
+    if (!bucket) return;
+    if (bucket instanceof Set) {
+      bucket.delete(site);
+      if (bucket.size === 0) this.forward.delete(prop);
+      else if (bucket.size === 1) this.forward.set(prop, bucket.values().next().value as Site);
+    } else if (bucket === site) {
+      this.forward.delete(prop);
+    }
   }
 }
 
