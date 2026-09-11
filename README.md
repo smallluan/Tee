@@ -21,21 +21,21 @@ Tee 不用虚拟 DOM。**数据路径和真实 DOM 站点之间有一张双向�
 
 `setup` / `computed` / `watch` / `onMounted` / `ref` 你已经会写。Tee 不发明 hold、derive、trail、act、weave。差别是这三件事：
 
-1. **脚本和模板共用同一份对象。** `c.count` 就是 `{{ count }}`。不是 setup 返回一包 ref，再靠编译解开 `.value`。
+1. **脚本和模板共用同一份对象。** `self.count` 就是 `{{ count }}`。不是 setup 返回一包 ref，再靠编译解开 `.value`。
 2. **组合是普通函数往这份对象上写字段。** 不是返回一包 ref 再 merge。把对象传进去，或在 `setup()` 期间调用 `watch()` / `onMounted()`，和已经习惯的写法一样。
 3. **更新是映射表上的站点，不是函数组件再跑一遍。** Options API（`data` / `computed` / `methods`）填的也是同一份对象。
 
 ```ts
 import { setup, computed, watch, onMounted } from "tee-framework";
 
-export default setup((c) => {
-  c.n = 0;
-  c.label = computed(() => `×${Number(c.n) * 2}`);
-  c.bump = () => {
-    c.n = Number(c.n) + 1;
+export default setup((self) => {
+  self.n = 0;
+  self.label = computed(() => `×${Number(self.n) * 2}`);
+  self.bump = () => {
+    self.n = Number(self.n) + 1;
   };
   watch(
-    () => c.n,
+    () => self.n,
     (n) => {
       document.title = String(n);
     },
@@ -53,16 +53,16 @@ export default setup((c) => {
 可复用逻辑是普通函数，参数就是这份对象：
 
 ```ts
-function useCounter(c) {
-  c.n = 0;
-  c.bump = () => {
-    c.n = Number(c.n) + 1;
+function useCounter(self) {
+  self.n = 0;
+  self.bump = () => {
+    self.n = Number(self.n) + 1;
   };
 }
 
-export default setup((c) => {
-  useCounter(c);
-  c.label = computed(() => `n=${c.n}`);
+export default setup((self) => {
+  useCounter(self);
+  self.label = computed(() => `n=${self.n}`);
 });
 ```
 
@@ -146,7 +146,7 @@ npm test
 | `provide` / `inject` | 同名 |
 | 插槽 | `<slot>` / `t-slot` |
 | `.vue` + Less scoped | `.tee` + `lang="less"` scoped |
-| `setup` / `computed` / `watch` / `onMounted` / `ref` | 同名。合同不同：写在 `c` 上的名字就是模板名 |
+| `setup` / `computed` / `watch` / `onMounted` / `ref` | 同名。合同不同：写在 `self` 上的名字就是模板名 |
 
 编辑器材料在 `editor/`：HTML custom data、TextMate 语法、`*.tee` 类型。
 
@@ -165,12 +165,12 @@ import { setup } from "tee-framework";
 
 export default setup({
   tag: "hello-box",
-  setup(c) {
-    c.guest = "访客";
-    c.count = 0;
-    c.ok = true;
-    c.bump = () => {
-      c.count = Number(c.count) + 1;
+  setup(self) {
+    self.guest = "访客";
+    self.count = 0;
+    self.ok = true;
+    self.bump = () => {
+      self.count = Number(self.count) + 1;
     };
   },
 });
@@ -242,4 +242,4 @@ editor/
 
 公开入口：`Tee.create`、`Tee.define`、`Tee.setup`、`Tee.nextTick`、`Tee.version`，以及 `setup` / `computed` / `watch` / `onMounted` / `ref`。
 
-npm 包：`tee-framework`、`create-tee`。
+npm 包：`tee-framework`、`create-tee`。发布到 npm 的是 `dist/` 里的 JavaScript（Node 加载 `vite.config.ts` 时不会给 `node_modules` 里的 `.ts` 剥类型）。

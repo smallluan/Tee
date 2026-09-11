@@ -7,10 +7,10 @@ import { setup } from "tee";
 
 export default setup({
   tag: "mini-counter",
-  setup(c) {
-    c.n = 0;
-    c.bump = () => {
-      c.n = Number(c.n) + 1;
+  setup(self) {
+    self.n = 0;
+    self.bump = () => {
+      self.n = Number(self.n) + 1;
     };
   },
 });

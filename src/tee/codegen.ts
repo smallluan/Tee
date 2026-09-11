@@ -1,4 +1,4 @@
-import { attrValue, isVoidTag, staticAttrs, type ElNode, type TmplNode } from "./html.ts";
+import { attrValue, isVoidTag, staticAttrs, type ElNode, type TmplNode } from "./html";
 
 /**
  * Build-time factory codegen: native HTML becomes `document.createElement`
@@ -205,7 +205,7 @@ class Gen {
   }
 }
 
-function isAotNative(node: ElNode): boolean {
+export function isAotNative(node: ElNode): boolean {
   if (!NATIVE.has(node.tag)) return false;
   for (const attr of node.attrs) {
     if (

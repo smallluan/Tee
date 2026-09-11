@@ -25,11 +25,11 @@
 <script lang="ts">
 import { setup, computed } from "tee-framework";
 
-export default setup((c) => {
-  c.title = "新的 Tee 应用";
-  c.guest = "";
-  c.count = 0;
-  c.doubled = computed(() => Number(c.count) * 2);
+export default setup((self) => {
+  self.title = "新的 Tee 应用";
+  self.guest = "";
+  self.count = 0;
+  self.doubled = computed(() => Number(self.count) * 2);
 });
 </script>
 

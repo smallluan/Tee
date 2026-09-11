@@ -1,4 +1,4 @@
-import { splitInterpolation } from "./expr.ts";
+import { splitInterpolation } from "./expr";
 
 export type TmplAttr =
   | { kind: "static"; name: string; value: string }

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { transformWithOxc, type Plugin } from "vite";
-import { compileSFC, parseSFC, hashScopeId, scopeCss } from "./sfc.ts";
+import { compileSFC, parseSFC, hashScopeId, scopeCss } from "./sfc";
 
 /**
  * Vite plugin for `.tee` single-file components.

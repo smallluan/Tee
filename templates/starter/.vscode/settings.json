@@ -3,6 +3,10 @@
     "*.tee": "html"
   },
   "html.customData": ["./.vscode/tee.html-data.json"],
+  "html.validate.styles": false,
+  "html.validate.scripts": false,
+  "css.validate": false,
+  "less.validate": false,
   "emmet.includeLanguages": {
     "tee": "html"
   }

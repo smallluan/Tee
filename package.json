@@ -1,21 +1,28 @@
 {
   "name": "tee-framework",
-  "version": "0.8.0",
+  "version": "0.8.2",
   "description": "Tee — a point-to-point reactive frontend framework driven by bidirectional DOM maps, not a virtual DOM.",
   "type": "module",
-  "main": "./src/tee/index.ts",
-  "module": "./src/tee/index.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
     "create-tee": "./scripts/create-tee.mjs"
   },
   "exports": {
-    ".": "./src/tee/index.ts",
-    "./plugin": "./src/tee/plugin.ts",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js"
+    },
     "./create": "./scripts/create-tee.mjs",
     "./package.json": "./package.json"
   },
   "files": [
-    "src/tee",
+    "dist",
     "scripts",
     "templates",
     "editor",
@@ -24,13 +31,14 @@
   ],
   "scripts": {
     "dev": "vite --port 43151 --host 0.0.0.0",
-    "build": "vite build",
+    "build": "vite build --config vite.lib.config.ts && tsc -p tsconfig.build.json --noCheck",
+    "build:demo": "vite build",
     "preview": "vite preview --port 43151 --host 0.0.0.0",
     "test": "vitest run",
     "test:watch": "vitest",
     "create": "node scripts/create-tee.mjs",
     "bench:install": "node scripts/install-js-benchmark.mjs",
-    "prepublishOnly": "vitest run"
+    "prepublishOnly": "vitest run && npm run build"
   },
   "peerDependencies": {
     "less": "^4.0.0",
