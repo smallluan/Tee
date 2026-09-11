@@ -969,8 +969,147 @@ type RepeatRow = {
   index: number;
 };
 
+function createRepeatRow(
+  item: unknown,
+  index: number,
+  key: string,
+  parsed: { item: string; index: string },
+  scope: Scope,
+  ctx: CompileContext,
+  render: RowRenderer,
+): RepeatRow {
+  const inst = render.fastScope ? ctx.instance.child(true, false) : ctx.instance.child();
+  const liveScope = render.fastScope
+    ? createFastRepeatScope(scope, parsed.item, parsed.index, item, index, inst)
+    : createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst);
+  const holder = document.createDocumentFragment();
+  render(holder, liveScope, { ...ctx, instance: inst });
+  return { key, inst, nodes: [...holder.childNodes], scope: liveScope, item, index };
+}
+
+function updateRepeatIndex(
+  row: RepeatRow,
+  index: number,
+  parsed: { item: string; index: string },
+  render: RowRenderer,
+  ctx: CompileContext,
+): void {
+  if (row.index === index) return;
+  row.index = index;
+  row.scope[parsed.index] = index;
+  if (render.usesIndex === false) return;
+  for (const site of row.inst.sites) {
+    site.linked = false;
+    ctx.engine.mark(site);
+  }
+}
+
+function patchRepeatSwap(end: Node, ordered: RepeatRow[], firstIndex: number, secondIndex: number): void {
+  const parent = end.parentNode;
+  if (!parent) return;
+  const first = ordered[firstIndex];
+  const second = ordered[secondIndex];
+  const firstNode = first.nodes[0];
+  const secondNext = second.nodes.at(-1)?.nextSibling ?? end;
+  insertRepeatRange(parent, ordered, secondIndex, secondIndex, firstNode);
+  insertRepeatRange(parent, ordered, firstIndex, firstIndex, secondNext);
+}
+
+function reconcileSimpleRepeatMutation(
+  items: unknown[],
+  previous: RepeatRow[],
+  rows: Map<string, RepeatRow>,
+  parsed: { item: string; index: string },
+  keySrc: string | null,
+  scope: Scope,
+  ctx: CompileContext,
+  end: Node,
+  render: RowRenderer,
+): RepeatRow[] | null {
+  const delta = items.length - previous.length;
+  if (delta > 0) {
+    let index = 0;
+    while (index < previous.length && Object.is(items[index], previous[index].item)) index += 1;
+    for (let old = index; old < previous.length; old++) {
+      if (!Object.is(items[old + delta], previous[old].item)) return null;
+    }
+
+    const keys: string[] = [];
+    const inserted = new Set<string>();
+    for (let offset = 0; offset < delta; offset++) {
+      const itemIndex = index + offset;
+      let key = keyFor(items[itemIndex], itemIndex, keySrc, parsed.item, parsed.index, scope);
+      if (rows.has(key)) return null;
+      while (inserted.has(key)) key += "#" + itemIndex;
+      inserted.add(key);
+      keys.push(key);
+    }
+
+    const additions = new Array<RepeatRow>(delta);
+    for (let offset = 0; offset < delta; offset++) {
+      const itemIndex = index + offset;
+      const row = createRepeatRow(items[itemIndex], itemIndex, keys[offset], parsed, scope, ctx, render);
+      additions[offset] = row;
+      rows.set(row.key, row);
+    }
+    const anchor = previous[index]?.nodes[0] ?? end;
+    insertRepeatRange(end.parentNode!, additions, 0, additions.length - 1, anchor);
+    const ordered = previous.slice();
+    ordered.splice(index, 0, ...additions);
+    for (let next = index + delta; next < ordered.length; next++) {
+      updateRepeatIndex(ordered[next], next, parsed, render, ctx);
+    }
+    return ordered;
+  }
+
+  if (delta < 0) {
+    const removedCount = -delta;
+    let index = 0;
+    while (index < items.length && Object.is(items[index], previous[index].item)) index += 1;
+    for (let next = index; next < items.length; next++) {
+      if (!Object.is(items[next], previous[next + removedCount].item)) return null;
+    }
+
+    const ordered = previous.slice();
+    const removed = ordered.splice(index, removedCount);
+    for (const row of removed) {
+      row.inst.destroy();
+      for (const node of row.nodes) node.parentNode?.removeChild(node);
+      rows.delete(row.key);
+    }
+    for (let next = index; next < ordered.length; next++) {
+      updateRepeatIndex(ordered[next], next, parsed, render, ctx);
+    }
+    return ordered;
+  }
+
+  if (items.length > 1) {
+    const displaced: number[] = [];
+    for (let index = 0; index < items.length && displaced.length < 3; index++) {
+      if (!Object.is(items[index], previous[index]?.item)) displaced.push(index);
+    }
+    if (
+      displaced.length === 2 &&
+      Object.is(items[displaced[0]], previous[displaced[1]].item) &&
+      Object.is(items[displaced[1]], previous[displaced[0]].item)
+    ) {
+      const ordered = previous.slice();
+      [ordered[displaced[0]], ordered[displaced[1]]] = [
+        ordered[displaced[1]],
+        ordered[displaced[0]],
+      ];
+      updateRepeatIndex(ordered[displaced[0]], displaced[0], parsed, render, ctx);
+      updateRepeatIndex(ordered[displaced[1]], displaced[1], parsed, render, ctx);
+      patchRepeatSwap(end, ordered, displaced[0], displaced[1]);
+      return ordered;
+    }
+  }
+  return null;
+}
+
 function reconcileRepeat(
   items: unknown[],
+  previous: RepeatRow[],
   rows: Map<string, RepeatRow>,
   parsed: { item: string; index: string },
   keySrc: string | null,
@@ -979,13 +1118,26 @@ function reconcileRepeat(
   start: Node,
   end: Node,
   render: RowRenderer,
-): void {
+): RepeatRow[] {
   if (items.length === 0 && rows.size) {
     for (const row of rows.values()) row.inst.destroy();
     rows.clear();
     clearRepeatDom(start, end);
-    return;
+    return [];
   }
+
+  const simple = reconcileSimpleRepeatMutation(
+    items,
+    previous,
+    rows,
+    parsed,
+    keySrc,
+    scope,
+    ctx,
+    end,
+    render,
+  );
+  if (simple) return simple;
 
   const previousSize = rows.size;
   const used = new Set<string>();
@@ -1005,13 +1157,7 @@ function reconcileRepeat(
     if (!row) {
       created = true;
       oldPositions.push(-1);
-      const inst = render.fastScope ? ctx.instance.child(true, false) : ctx.instance.child();
-      const liveScope = render.fastScope
-        ? createFastRepeatScope(scope, parsed.item, parsed.index, item, index, inst)
-        : createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst);
-      const holder = document.createDocumentFragment();
-      render(holder, liveScope, { ...ctx, instance: inst });
-      row = { key, inst, nodes: [...holder.childNodes], scope: liveScope, item, index };
+      row = createRepeatRow(item, index, key, parsed, scope, ctx, render);
       rows.set(key, row);
     } else {
       reused += 1;
@@ -1048,8 +1194,8 @@ function reconcileRepeat(
     rows.delete(key);
   }
 
-  if (!created && !moved) return;
-  patchRepeatDom(end, ordered, oldPositions, reused);
+  if (created || moved) patchRepeatDom(end, ordered, oldPositions, reused);
+  return ordered;
 }
 
 function bindRepeat(el: Element, scope: Scope, ctx: CompileContext): void {
@@ -1064,6 +1210,7 @@ function bindRepeat(el: Element, scope: Scope, ctx: CompileContext): void {
   el.replaceWith(start);
   start.parentNode?.insertBefore(end, start.nextSibling);
   const rows = new Map<string, RepeatRow>();
+  let orderedRows: RepeatRow[] = [];
 
   addSite(ctx, {
     kind: "repeat",
@@ -1072,8 +1219,9 @@ function bindRepeat(el: Element, scope: Scope, ctx: CompileContext): void {
     rank: Rank.Structure,
     run() {
       applyReactive(this, ctx, scope, parsed.list, (list) => {
-        reconcileRepeat(
+        orderedRows = reconcileRepeat(
           Array.isArray(list) ? list : [],
+          orderedRows,
           rows,
           parsed,
           keySrc,
@@ -1517,6 +1665,7 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
   parent.appendChild(start);
   parent.appendChild(end);
   const rows = new Map<string, RepeatRow>();
+  let orderedRows: RepeatRow[] = [];
   const classPlan = keyedClassPlan(stripped, parsed.item, keySrc);
   const render = rowRenderer(stripped, classPlan?.src ?? null, keySrc, parsed.item, parsed.index);
   let selectedKey: string | null = null;
@@ -1533,8 +1682,9 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
     },
     run() {
       applyReactive(this, ctx, scope, parsed.list, (list) => {
-        reconcileRepeat(
+        orderedRows = reconcileRepeat(
           Array.isArray(list) ? list : [],
+          orderedRows,
           rows,
           parsed,
           keySrc,
