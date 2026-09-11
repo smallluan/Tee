@@ -52,8 +52,12 @@ export class Engine {
 
   notify(prop: PropKey): void {
     this.stats.notify += 1;
-    this.lattice.bump(prop);
-    this.maps.forEachSite(prop, (site) => this.mark(site));
+    let needsClock = false;
+    this.maps.forEachSite(prop, (site) => {
+      if (!site.exact) needsClock = true;
+      this.mark(site);
+    });
+    if (needsClock) this.lattice.bump(prop);
     if (!this.flushing) this.schedule();
   }
 

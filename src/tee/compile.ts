@@ -741,6 +741,7 @@ function addSingleDirectRowSite(
     node: root,
     label: "repeat row bindings",
     rank: Rank.Leaf,
+    exact: true,
     run() {
       if (site.dead) return;
       if (!site.linked) {
@@ -778,6 +779,7 @@ function addDirectRowSite(
     node: root,
     label: "repeat row bindings",
     rank: Rank.Leaf,
+    exact: true,
     run() {
       if (site.dead) return;
       if (!site.linked) {
