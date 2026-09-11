@@ -964,32 +964,12 @@ function repeatRowElement(row: RepeatRow | undefined): Element | null {
 
 type RepeatRow = {
   key: string;
-  inst: RepeatOwner;
+  inst: Instance;
   nodes: Node[];
   scope: Scope;
   item: unknown;
   index: number;
 };
-
-interface RepeatOwner {
-  readonly sites: Site[];
-  destroy(): void;
-}
-
-class FastRowOwner implements RepeatOwner {
-  readonly sites: Site[] = [];
-
-  constructor(private readonly engine: Engine) {}
-
-  destroy(): void {
-    for (const site of this.sites) {
-      site.dead = true;
-      site.dispose?.();
-      this.engine.maps.unlink(site);
-    }
-    this.sites.length = 0;
-  }
-}
 
 function createRepeatRow(
   item: unknown,
@@ -1000,12 +980,12 @@ function createRepeatRow(
   ctx: CompileContext,
   render: RowRenderer,
 ): RepeatRow {
-  const inst: RepeatOwner = render.fastScope ? new FastRowOwner(ctx.engine) : ctx.instance.child();
+  const inst = render.fastScope ? ctx.instance.child(true, false) : ctx.instance.child();
   const liveScope = render.fastScope
-    ? createFastRepeatScope(scope, parsed.item, parsed.index, item, index, ctx.instance)
-    : createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst as Instance);
+    ? createFastRepeatScope(scope, parsed.item, parsed.index, item, index, inst)
+    : createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst);
   const holder = document.createDocumentFragment();
-  render(holder, liveScope, { ...ctx, instance: inst as Instance });
+  render(holder, liveScope, { ...ctx, instance: inst });
   return { key, inst, nodes: [...holder.childNodes], scope: liveScope, item, index };
 }
 
