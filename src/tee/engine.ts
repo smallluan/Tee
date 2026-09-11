@@ -35,6 +35,10 @@ export class Engine {
     return "c" + ++this.computedSeq + "." + name;
   }
 
+  get trackingActive(): boolean {
+    return this.tracking.length !== 0;
+  }
+
   startTrack(): void {
     this.tracking.push({ props: new Set(), labels: new Set() });
   }

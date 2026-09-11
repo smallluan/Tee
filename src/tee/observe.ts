@@ -62,7 +62,7 @@ const HANDLER: ProxyHandler<ReactiveTarget> = {
     if (key === "__teeRaw") return target;
     if (typeof key === "symbol") {
       if (meta.isArray && key === Symbol.iterator) {
-        meta.engine.record(`${meta.objectId}.__list`, "list");
+        if (meta.engine.trackingActive) meta.engine.record(`${meta.objectId}.__list`, "list");
         const iter = Reflect.get(target, key, receiver) as () => unknown;
         return iter.bind(meta.proxy);
       }
@@ -70,9 +70,11 @@ const HANDLER: ProxyHandler<ReactiveTarget> = {
     }
 
     const name = String(key);
-    meta.engine.record(`${meta.objectId}.${name}`, name);
-    if (meta.isArray && (name === "length" || name === "__list")) {
-      meta.engine.record(`${meta.objectId}.__list`, "list");
+    if (meta.engine.trackingActive) {
+      meta.engine.record(`${meta.objectId}.${name}`, name);
+      if (meta.isArray && (name === "length" || name === "__list")) {
+        meta.engine.record(`${meta.objectId}.__list`, "list");
+      }
     }
 
     const found = Reflect.get(target, key, receiver);
@@ -85,7 +87,7 @@ const HANDLER: ProxyHandler<ReactiveTarget> = {
       };
     }
     if (meta.isArray && typeof found === "function" && ARRAY_READERS.has(name)) {
-      meta.engine.record(`${meta.objectId}.__list`, "list");
+      if (meta.engine.trackingActive) meta.engine.record(`${meta.objectId}.__list`, "list");
       return (found as (...xs: unknown[]) => unknown).bind(meta.proxy);
     }
     if (typeof found === "function") return found.bind(target);
