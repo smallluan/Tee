@@ -54,6 +54,41 @@ describe("computed + watch", () => {
     expect(host.textContent).toBe("青石 / 30");
   });
 
+  it("recomputes array reductions after push and item edits", async () => {
+    const totals: unknown[][] = [];
+    const { app, host } = mount({
+      template: `<p>{{ count }}/{{ total }}</p>`,
+      data: { cart: [] as Array<{ price: number; qty: number }> },
+      computed: {
+        count() {
+          return (this.cart as Array<{ qty: number }>).reduce((sum, line) => sum + line.qty, 0);
+        },
+        total() {
+          return (this.cart as Array<{ price: number; qty: number }>).reduce(
+            (sum, line) => sum + line.price * line.qty,
+            0,
+          );
+        },
+      },
+      watch: {
+        total(next, prev) {
+          totals.push([next, prev]);
+        },
+      },
+    });
+    expect(host.textContent).toBe("0/0");
+    (app.data.cart as Array<{ price: number; qty: number }>).push({ price: 42, qty: 1 });
+    await tick(app);
+    expect(host.textContent).toBe("1/42");
+    (app.data.cart as Array<{ price: number; qty: number }>)[0].qty = 2;
+    await tick(app);
+    expect(host.textContent).toBe("2/84");
+    expect(totals).toEqual([
+      [42, 0],
+      [84, 42],
+    ]);
+  });
+
   it("fires watchers with next and previous values", async () => {
     const calls: unknown[][] = [];
     const { app } = mount({

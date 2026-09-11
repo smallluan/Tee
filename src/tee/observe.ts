@@ -12,6 +12,38 @@ const ARRAY_MUTATORS = new Set([
   "copyWithin",
 ]);
 
+const ARRAY_READERS = new Set([
+  "at",
+  "concat",
+  "entries",
+  "every",
+  "filter",
+  "find",
+  "findIndex",
+  "findLast",
+  "findLastIndex",
+  "flat",
+  "flatMap",
+  "forEach",
+  "includes",
+  "indexOf",
+  "join",
+  "keys",
+  "lastIndexOf",
+  "map",
+  "reduce",
+  "reduceRight",
+  "slice",
+  "some",
+  "toLocaleString",
+  "toReversed",
+  "toSorted",
+  "toSpliced",
+  "toString",
+  "values",
+  "with",
+]);
+
 const PROXY = new WeakMap<object, object>();
 const RAW = new WeakMap<object, object>();
 
@@ -44,7 +76,14 @@ function wrap(value: unknown, engine: Engine): unknown {
     get(t, key, receiver) {
       if (key === "__teeId") return objectId;
       if (key === "__teeRaw") return t;
-      if (typeof key === "symbol") return Reflect.get(t, key, receiver);
+      if (typeof key === "symbol") {
+        if (isArr && key === Symbol.iterator) {
+          engine.record(`${objectId}.__list`, "list");
+          const iter = Reflect.get(t, key, receiver) as () => unknown;
+          return iter.bind(proxy);
+        }
+        return Reflect.get(t, key, receiver);
+      }
 
       const name = String(key);
       engine.record(`${objectId}.${name}`, name);
@@ -61,6 +100,10 @@ function wrap(value: unknown, engine: Engine): unknown {
           engine.notify(`${objectId}.length`);
           return result;
         };
+      }
+      if (isArr && typeof found === "function" && ARRAY_READERS.has(name)) {
+        engine.record(`${objectId}.__list`, "list");
+        return (found as (...xs: unknown[]) => unknown).bind(proxy);
       }
       if (typeof found === "function") return found.bind(t);
       return wrap(found, engine);

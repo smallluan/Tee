@@ -149,7 +149,9 @@ const app = Tee.create({
       return menu
         .map((category) => ({
           ...category,
-          teas: category.teas.filter((tea) => tea.name.includes(q)),
+          teas: category.name.includes(q)
+            ? category.teas
+            : category.teas.filter((tea) => tea.name.includes(q)),
         }))
         .filter((category) => category.teas.length > 0);
     },
