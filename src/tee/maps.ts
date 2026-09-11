@@ -38,7 +38,7 @@ export class TwinMap {
   linkOne(site: Site, prop: PropKey, debugProp = prop): void {
     this.unlink(site);
     this.reverse.set(site, prop);
-    this.debug.set(site, debugProp);
+    site.debugLabel = debugProp;
     const bucket = this.forward.get(prop);
     if (!bucket) {
       this.forward.set(prop, site);
@@ -67,6 +67,7 @@ export class TwinMap {
       this.unlinkForward(prev, site);
       this.reverse.delete(site);
       this.debug.delete(site);
+      site.debugLabel = undefined;
       return;
     }
     for (const prop of prev) {
@@ -74,6 +75,7 @@ export class TwinMap {
     }
     this.reverse.delete(site);
     this.debug.delete(site);
+    site.debugLabel = undefined;
   }
 
   sitesFor(prop: PropKey): ReadonlySet<Site> {
@@ -100,7 +102,7 @@ export class TwinMap {
 
   debugFor(site: Site): ReadonlySet<string> {
     const bucket = this.debug.get(site);
-    if (!bucket) return EMPTY_PROPS;
+    if (!bucket) return site.debugLabel ? new Set([site.debugLabel]) : EMPTY_PROPS;
     return typeof bucket === "string" ? new Set([bucket]) : bucket;
   }
 

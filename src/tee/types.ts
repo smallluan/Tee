@@ -18,6 +18,7 @@ export interface Site {
   rank?: number;
   linked?: boolean;
   exact?: boolean;
+  debugLabel?: string;
   queued?: boolean;
   dead?: boolean;
   last?: unknown;
