@@ -26,11 +26,12 @@ for (const bin of bins) {
   }
 }
 
-console.log(`Install Tee highlighting (required, otherwise .tee is plain text):
+console.log(`Install Tee highlighting:
 
-  Command Palette → Extensions: Install from VSIX…
+  命令面板 → 扩展: 从 VSIX 安装… (Extensions: Install from VSIX…)
   → ${target}
 
-Then reload VS Code / Cursor. The tab icon is a gold T on ink, not a generic text file.
+  资源管理器里看到 tee-language.vsix 并不等于已安装。
+  装好后扩展列表里应出现 Tee，右下角语言为 Tee，标签页是金色 T。
 `);
 process.exit(0);

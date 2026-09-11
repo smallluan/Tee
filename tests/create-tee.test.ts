@@ -19,7 +19,7 @@ describe("create-tee", () => {
       expect(pkg.dependencies["tee-framework"]).toMatch(/^file:/);
       expect(readFileSync(join(dest, "src/App.tee"), "utf8")).toContain("lang=\"less\"");
       expect(readFileSync(join(dest, "src/main.ts"), "utf8")).toContain("Tee.create");
-      expect(readFileSync(join(dest, ".vscode/settings.json"), "utf8")).toContain('"*.tee": "tee"');
+      expect(readFileSync(join(dest, ".vscode/settings.json"), "utf8")).toContain('"*.tee": "html"');
       expect(existsSync(join(dest, ".vscode/tee-language.vsix"))).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });

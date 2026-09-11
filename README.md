@@ -195,7 +195,7 @@ Tee.create({ el: "#app", ...App });
 
 ## 编辑器
 
-`.tee` **不是** HTML。没装 Tee 扩展时，VS Code 会把它当成纯文本（全白、通用文本图标）。
+`.tee` **不是** HTML。把 `tee-language.vsix` 放在项目里**不会**自动安装。没装扩展且把语言设成 `tee` 时，VS Code 会当成纯文本（全白）。
 
 1. Command Palette → **Extensions: Install from VSIX…**
 2. 选 `editor/tee-language.vsix`（脚手架项目里是 `.vscode/tee-language.vsix`）

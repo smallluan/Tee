@@ -20,23 +20,37 @@ function activate(context) {
   const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
   const project = createTeeLanguageProject(null, folder);
 
-  function sync(document) {
-    if (document.languageId !== "tee") return;
+  async function adopt(document) {
+    if (!document?.uri?.fsPath?.endsWith(".tee")) return;
+    if (document.languageId !== "tee") {
+      try {
+        document = await vscode.languages.setTextDocumentLanguage(document, "tee");
+      } catch {
+        return;
+      }
+    }
     project.upsert(document.uri.fsPath, document.getText());
   }
 
-  for (const doc of vscode.workspace.textDocuments) sync(doc);
+  for (const doc of vscode.workspace.textDocuments) void adopt(doc);
   context.subscriptions.push(
-    vscode.workspace.onDidOpenTextDocument(sync),
-    vscode.workspace.onDidChangeTextDocument((e) => sync(e.document)),
+    vscode.workspace.onDidOpenTextDocument((doc) => void adopt(doc)),
+    vscode.workspace.onDidChangeTextDocument((e) => void adopt(e.document)),
   );
+
+  if (!context.globalState.get("tee.didActivateNotice")) {
+    void vscode.window.showInformationMessage(
+      "Tee 语言已启用。.tee 标签页应是金色 T；若仍是纯文本，点右下角语言选 Tee。",
+    );
+    void context.globalState.update("tee.didActivateNotice", true);
+  }
 
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(
       selector,
       {
         provideCompletionItems(document, position) {
-          sync(document);
+          void adopt(document);
           const offset = document.offsetAt(position);
           const items = project.completions(document.uri.fsPath, offset);
           return items.map((entry) => {
@@ -63,7 +77,7 @@ function activate(context) {
   context.subscriptions.push(
     vscode.languages.registerHoverProvider(selector, {
       provideHover(document, position) {
-        sync(document);
+        void adopt(document);
         const info = project.hover(document.uri.fsPath, document.offsetAt(position));
         if (!info) return undefined;
         return new vscode.Hover(new vscode.MarkdownString("```ts\n" + info.text + "\n```"));
@@ -74,7 +88,7 @@ function activate(context) {
   context.subscriptions.push(
     vscode.languages.registerDefinitionProvider(selector, {
       async provideDefinition(document, position) {
-        sync(document);
+        await adopt(document);
         const defs = project.definition(document.uri.fsPath, document.offsetAt(position));
         const out = [];
         for (const d of defs) {
