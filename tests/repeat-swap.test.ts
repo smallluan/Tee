@@ -77,6 +77,45 @@ describe("keyed t-repeat", () => {
     expect(inserts).toBe(1);
   });
 
+  it("does not invalidate index-independent row sites after a removal", async () => {
+    const { app, host } = mount({
+      template: `<li t-repeat="item in items" t-key="item.id">{{ item.name }}</li>`,
+      data: {
+        items: [
+          { id: 1, name: "a" },
+          { id: 2, name: "b" },
+          { id: 3, name: "c" },
+          { id: 4, name: "d" },
+        ],
+      },
+    });
+
+    (app.data.items as Array<{ id: number; name: string }>).splice(0, 1);
+    await tick(app);
+
+    expect([...host.querySelectorAll("li")].map((el) => el.textContent)).toEqual(["b", "c", "d"]);
+    expect(app.stats().run).toBe(1);
+  });
+
+  it("still invalidates shifted rows whose bindings read the repeat index", async () => {
+    const { app, host } = mount({
+      template: `<li t-repeat="item in items" t-key="item.id">{{ item.name }}-{{ $index }}</li>`,
+      data: {
+        items: [
+          { id: 1, name: "a" },
+          { id: 2, name: "b" },
+          { id: 3, name: "c" },
+        ],
+      },
+    });
+
+    (app.data.items as Array<{ id: number; name: string }>).splice(0, 1);
+    await tick(app);
+
+    expect([...host.querySelectorAll("li")].map((el) => el.textContent)).toEqual(["b-0", "c-1"]);
+    expect(app.stats().run).toBe(3);
+  });
+
   it("still swaps in place after the list is replaced", async () => {
     const { app, host } = mount({
       template: `<li t-repeat="item in items" t-key="item.id">{{ item.name }}</li>`,

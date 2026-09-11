@@ -729,7 +729,6 @@ function addDirectRowSite(
         const props = bindings.map((binding) => directBindingProp(binding, scope));
         if (props.some((prop) => prop == null)) return;
         ctx.engine.maps.link(site, props as string[], bindings.map((binding) => binding.directPath!.at(-1)!));
-        ctx.engine.capture(site);
         site.linked = true;
       }
       for (let i = 0; i < bindings.length; i++) {
@@ -742,7 +741,6 @@ function addDirectRowSite(
         }
       }
       initialized = true;
-      ctx.engine.touch(site);
     },
   };
   ctx.instance.sites.push(site);
@@ -751,6 +749,7 @@ function addDirectRowSite(
 
 type RowRenderer = ((parent: Node, scope: Scope, ctx: CompileContext) => void) & {
   fastScope?: boolean;
+  usesIndex?: boolean;
 };
 
 function fastRowRenderer(
@@ -758,6 +757,7 @@ function fastRowRenderer(
   keyedClassSrc: string | null,
   keySrc: string | null,
   itemName: string,
+  indexName: string,
 ): RowRenderer {
   let cachedScopeId: string | undefined;
   let cached: FastRowPlan | undefined;
@@ -825,7 +825,22 @@ function fastRowRenderer(
     parent.appendChild(root);
   };
   render.fastScope = true;
+  render.usesIndex = rowUsesIndex(node, indexName);
   return render;
+}
+
+function expressionUsesName(src: string, name: string): boolean {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\w$])${escaped}($|[^\\w$])`).test(src);
+}
+
+function rowUsesIndex(node: TmplNode, indexName: string): boolean {
+  if (node.t === "text") return false;
+  if (node.t === "live") return expressionUsesName(node.src, indexName);
+  for (const attr of node.attrs) {
+    if (attr.kind === "bind" && expressionUsesName(attr.value, indexName)) return true;
+  }
+  return node.children.some((child) => rowUsesIndex(child, indexName));
 }
 
 function rowRenderer(
@@ -833,8 +848,9 @@ function rowRenderer(
   keyedClassSrc: string | null = null,
   keySrc: string | null = null,
   itemName = "item",
+  indexName = "$index",
 ): RowRenderer {
-  if (isFastRowTree(node)) return fastRowRenderer(node, keyedClassSrc, keySrc, itemName);
+  if (isFastRowTree(node)) return fastRowRenderer(node, keyedClassSrc, keySrc, itemName, indexName);
   if (isAotNative(node)) {
     const body = generateRenderBody([node]);
     const fn = new Function("__rt", "parent", "s", "ctx", body);
@@ -941,7 +957,7 @@ function reconcileRepeat(
         moved = true;
         row.index = index;
         row.scope[parsed.index] = index;
-        localsChanged = true;
+        if (render.usesIndex !== false) localsChanged = true;
       }
       if (localsChanged) {
         for (const site of row.inst.sites) {
@@ -1425,7 +1441,7 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
   parent.appendChild(end);
   const rows = new Map<string, RepeatRow>();
   const classPlan = keyedClassPlan(stripped, parsed.item, keySrc);
-  const render = rowRenderer(stripped, classPlan?.src ?? null, keySrc, parsed.item);
+  const render = rowRenderer(stripped, classPlan?.src ?? null, keySrc, parsed.item, parsed.index);
   let selectedKey: string | null = null;
   let syncSelectedRow = () => undefined;
 
