@@ -263,6 +263,78 @@ function bindEvent(el: Element, spec: string, src: string, scope: Scope, mods: s
   el.addEventListener(eventName, handler, { capture, once });
 }
 
+type DelegatedBinding = { scope: Scope; src: string; mods: string[] };
+const DELEGATED_KEYS = new Map<string, symbol>();
+const DELEGATED_DOCUMENTS = new WeakMap<Document, Set<string>>();
+
+function runDelegatedBinding(el: Element, event: Event, binding: DelegatedBinding): void {
+  const { mods } = binding;
+  if (mods.includes("self") && event.target !== el) return;
+  const keyName = mods.map((mod) => KEY_MODS[mod]).find(Boolean);
+  if (keyName && (event as KeyboardEvent).key !== keyName) return;
+  if (mods.includes("prevent")) event.preventDefault();
+  if (mods.includes("stop")) event.stopPropagation();
+  try {
+    runStatement(binding.scope, binding.src, event);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function dispatchDelegated(event: Event, key: symbol): void {
+  const path = event.composedPath?.() ?? [];
+  const fallback: EventTarget[] = [];
+  if (path.length === 0) {
+    let node = event.target as Node | null;
+    while (node) {
+      fallback.push(node);
+      node = node.parentNode;
+    }
+  }
+  const nodes = path.length ? path : fallback;
+  let current: Element | null = null;
+  try {
+    Object.defineProperty(event, "currentTarget", {
+      configurable: true,
+      get: () => current,
+    });
+  } catch {
+    // Older DOM shims may expose a non-configurable currentTarget.
+  }
+  for (const target of nodes) {
+    if (!(target instanceof Element)) continue;
+    const binding = (target as Element & { [key: symbol]: DelegatedBinding | undefined })[key];
+    if (!binding || target.hasAttribute("disabled")) continue;
+    current = target;
+    runDelegatedBinding(target, event, binding);
+    if (event.cancelBubble) break;
+  }
+  current = null;
+}
+
+function bindFastEvent(el: Element, eventName: string, src: string, scope: Scope, mods: string[]): void {
+  if (mods.includes("capture") || mods.includes("once")) {
+    bindEvent(el, eventName, src, scope, mods);
+    return;
+  }
+  let key = DELEGATED_KEYS.get(eventName);
+  if (!key) {
+    key = Symbol(`tee:${eventName}`);
+    DELEGATED_KEYS.set(eventName, key);
+  }
+  (el as Element & { [key: symbol]: DelegatedBinding })[key] = { scope, src, mods };
+  const doc = el.ownerDocument;
+  let installed = DELEGATED_DOCUMENTS.get(doc);
+  if (!installed) {
+    installed = new Set();
+    DELEGATED_DOCUMENTS.set(doc, installed);
+  }
+  if (!installed.has(eventName)) {
+    installed.add(eventName);
+    doc.addEventListener(eventName, (event) => dispatchDelegated(event, key));
+  }
+}
+
 function bindModel(el: Element, path: string, scope: Scope, ctx: CompileContext, mods: string[] = []): void {
   const isCheck = el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio");
   const eventName = mods.includes("lazy") || isCheck || el instanceof HTMLSelectElement ? "change" : "input";
@@ -417,7 +489,7 @@ type FastRowBinding = {
   name: string | null;
   base: string;
   plan: ReturnType<typeof compileExpr>;
-  reactive: boolean;
+  mode: "reactive" | "once" | "skip";
 };
 
 type FastRowEvent = {
@@ -455,6 +527,7 @@ function createFastRowPlan(
   node: ElNode,
   scopeId: string | undefined,
   keyedClassSrc: string | null,
+  keySrc: string | null,
 ): FastRowPlan {
   const bindings: FastRowBinding[] = [];
   const events: FastRowEvent[] = [];
@@ -469,7 +542,7 @@ function createFastRowPlan(
         name: null,
         base: "",
         plan: compileExpr(current.src),
-        reactive: true,
+        mode: current.src === keySrc ? "once" : "reactive",
       });
       return document.createTextNode("");
     }
@@ -489,7 +562,12 @@ function createFastRowPlan(
           name: attr.name,
           base: attr.name === "class" ? el.getAttribute("class") || "" : "",
           plan: compileExpr(attr.value),
-          reactive: !(attr.name === "class" && path.length === 0 && attr.value === keyedClassSrc),
+          mode:
+            attr.name === "class" && path.length === 0 && attr.value === keyedClassSrc
+              ? "skip"
+              : attr.value === keySrc
+                ? "once"
+                : "reactive",
         });
       } else if (attr.kind === "ref") {
         refs.push({ path, name: attr.value });
@@ -514,7 +592,7 @@ function createFastRowPlan(
   return {
     root: build(node, []) as Element,
     bindings,
-    reactiveBindings: bindings.filter((binding) => binding.reactive),
+    reactiveBindings: bindings.filter((binding) => binding.mode === "reactive"),
     events,
     refs,
   };
@@ -566,21 +644,26 @@ type RowRenderer = ((parent: Node, scope: Scope, ctx: CompileContext) => void) &
 function fastRowRenderer(
   node: ElNode,
   keyedClassSrc: string | null,
+  keySrc: string | null,
 ): RowRenderer {
   let cachedScopeId: string | undefined;
   let cached: FastRowPlan | undefined;
   const render: RowRenderer = (parent, scope, ctx) => {
     if (!cached || cachedScopeId !== ctx.scopeId) {
       cachedScopeId = ctx.scopeId;
-      cached = createFastRowPlan(node, ctx.scopeId, keyedClassSrc);
+      cached = createFastRowPlan(node, ctx.scopeId, keyedClassSrc, keySrc);
     }
     const root = cached.root.cloneNode(true) as Element;
     const reactiveBindings = cached.reactiveBindings;
     const bindingNodes = reactiveBindings.map((binding) => nodeAtPath(root, binding.path));
     for (const event of cached.events) {
-      bindEvent(nodeAtPath(root, event.path) as Element, event.event, event.src, scope, event.mods);
+      bindFastEvent(nodeAtPath(root, event.path) as Element, event.event, event.src, scope, event.mods);
     }
     for (const ref of cached.refs) bindRef(nodeAtPath(root, ref.path) as Element, ref.name, scope);
+    for (const binding of cached.bindings) {
+      if (binding.mode !== "once") continue;
+      applyFastBinding(binding, nodeAtPath(root, binding.path), readFastBinding(binding, scope));
+    }
 
     if (reactiveBindings.length) {
       const values = new Array<unknown>(reactiveBindings.length);
@@ -633,8 +716,9 @@ function fastRowRenderer(
 function rowRenderer(
   node: ElNode,
   keyedClassSrc: string | null = null,
+  keySrc: string | null = null,
 ): RowRenderer {
-  if (isFastRowTree(node)) return fastRowRenderer(node, keyedClassSrc);
+  if (isFastRowTree(node)) return fastRowRenderer(node, keyedClassSrc, keySrc);
   if (isAotNative(node)) {
     const body = generateRenderBody([node]);
     const fn = new Function("__rt", "parent", "s", "ctx", body);
@@ -1215,7 +1299,7 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
   parent.appendChild(end);
   const rows = new Map<string, RepeatRow>();
   const classPlan = keyedClassPlan(stripped, parsed.item, keySrc);
-  const render = rowRenderer(stripped, classPlan?.src ?? null);
+  const render = rowRenderer(stripped, classPlan?.src ?? null, keySrc);
   let selectedKey: string | null = null;
   let syncSelectedRow = () => undefined;
 

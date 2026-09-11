@@ -50,13 +50,13 @@ describe("js-framework-benchmark keyed app", () => {
     expect(label.textContent).toBe(`${before} !!!`);
     expect(rows[0].querySelector("td:nth-of-type(2) a")).toBe(label);
 
-    label.dispatchEvent(new Event("click"));
+    label.dispatchEvent(new Event("click", { bubbles: true }));
     await tick(app);
     expect(rows[0].classList.contains("danger")).toBe(true);
     expect(rows[1].classList.contains("danger")).toBe(false);
 
     const removed = afterSwap[1];
-    removed.querySelector("td:nth-of-type(3) a")!.dispatchEvent(new Event("click"));
+    removed.querySelector("td:nth-of-type(3) a")!.dispatchEvent(new Event("click", { bubbles: true }));
     await tick(app);
     expect(host.contains(removed)).toBe(false);
     expect(host.querySelectorAll("tbody > tr")).toHaveLength(999);
