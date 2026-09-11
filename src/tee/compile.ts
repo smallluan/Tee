@@ -328,34 +328,265 @@ function bindShow(el: Element, scope: Scope, ctx: CompileContext): void {
   });
 }
 
-function patchRepeatDom(start: Node, end: Node, ordered: Array<{ nodes: Node[] }>): void {
+function longestIncreasingSubsequence(values: number[]): Set<number> {
+  const tails: number[] = [];
+  const prev = new Int32Array(values.length);
+  prev.fill(-1);
+
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+    if (value < 0) continue;
+    let lo = 0;
+    let hi = tails.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (values[tails[mid]] < value) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo > 0) prev[i] = tails[lo - 1];
+    tails[lo] = i;
+  }
+
+  const kept = new Set<number>();
+  let cursor = tails.length ? tails[tails.length - 1] : -1;
+  while (cursor >= 0) {
+    kept.add(cursor);
+    cursor = prev[cursor];
+  }
+  return kept;
+}
+
+function insertRepeatRange(
+  parent: Node,
+  ordered: Array<{ nodes: Node[] }>,
+  from: number,
+  to: number,
+  anchor: Node,
+): void {
+  if (from > to) return;
+  const fragment = document.createDocumentFragment();
+  for (let i = from; i <= to; i++) {
+    for (const node of ordered[i].nodes) fragment.appendChild(node);
+  }
+  parent.insertBefore(fragment, anchor);
+}
+
+function patchRepeatDom(
+  end: Node,
+  ordered: Array<{ nodes: Node[] }>,
+  oldPositions: number[],
+  reused: number,
+): void {
   const parent = end.parentNode;
   if (!parent) return;
-  let attached = 0;
-  let total = 0;
-  for (const row of ordered) {
-    for (const live of row.nodes) {
-      total += 1;
-      if (live.parentNode === parent) attached += 1;
-    }
-  }
-  if (total === 0) return;
-  if (attached === 0) {
+  if (ordered.length === 0) return;
+  if (reused === 0) {
     const frag = document.createDocumentFragment();
     for (const row of ordered) for (const live of row.nodes) frag.appendChild(live);
     parent.insertBefore(frag, end);
     return;
   }
-  let cursor: Node = start;
-  for (const row of ordered) {
-    for (const live of row.nodes) {
-      if (cursor.nextSibling !== live) parent.insertBefore(live, cursor.nextSibling);
-      cursor = live;
+
+  const kept = longestIncreasingSubsequence(oldPositions);
+  let anchor = end;
+  let pendingEnd = -1;
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    if (!kept.has(i)) {
+      if (pendingEnd < 0) pendingEnd = i;
+      continue;
+    }
+    if (pendingEnd >= 0) {
+      insertRepeatRange(parent, ordered, i + 1, pendingEnd, anchor);
+      pendingEnd = -1;
+    }
+    anchor = ordered[i].nodes[0] ?? anchor;
+  }
+  if (pendingEnd >= 0) insertRepeatRange(parent, ordered, 0, pendingEnd, anchor);
+}
+
+type FastRowBinding = {
+  path: number[];
+  src: string;
+  name: string | null;
+  base: string;
+  plan: ReturnType<typeof compileExpr>;
+};
+
+type FastRowEvent = {
+  path: number[];
+  event: string;
+  src: string;
+  mods: string[];
+};
+
+type FastRowRef = { path: number[]; name: string };
+
+type FastRowPlan = {
+  root: Element;
+  bindings: FastRowBinding[];
+  events: FastRowEvent[];
+  refs: FastRowRef[];
+};
+
+function isFastRowTree(node: TmplNode): boolean {
+  if (node.t !== "el") return true;
+  if (!isAotNative(node)) return false;
+  for (const attr of node.attrs) {
+    if (attr.kind !== "static" && attr.kind !== "on" && attr.kind !== "bind" && attr.kind !== "ref") {
+      return false;
     }
   }
+  return node.children.every(isFastRowTree);
+}
+
+function createFastRowPlan(node: ElNode, scopeId: string | undefined): FastRowPlan {
+  const bindings: FastRowBinding[] = [];
+  const events: FastRowEvent[] = [];
+  const refs: FastRowRef[] = [];
+
+  const build = (current: TmplNode, path: number[]): Node => {
+    if (current.t === "text") return document.createTextNode(current.value);
+    if (current.t === "live") {
+      bindings.push({
+        path,
+        src: current.src,
+        name: null,
+        base: "",
+        plan: compileExpr(current.src),
+      });
+      return document.createTextNode("");
+    }
+
+    const el = document.createElement(current.tag);
+    if (scopeId) el.setAttribute(scopeId, "");
+    for (const attr of staticAttrs(current.attrs)) {
+      if (attr.name !== "t-cloak") el.setAttribute(attr.name, attr.value);
+    }
+    for (const attr of current.attrs) {
+      if (attr.kind === "on") {
+        events.push({ path, event: attr.event, src: attr.value, mods: attr.mods });
+      } else if (attr.kind === "bind") {
+        bindings.push({
+          path,
+          src: attr.value,
+          name: attr.name,
+          base: attr.name === "class" ? el.getAttribute("class") || "" : "",
+          plan: compileExpr(attr.value),
+        });
+      } else if (attr.kind === "ref") {
+        refs.push({ path, name: attr.value });
+      }
+    }
+    for (let i = 0; i < current.children.length; i++) {
+      el.appendChild(build(current.children[i], [...path, i]));
+    }
+    return el;
+  };
+
+  return { root: build(node, []) as Element, bindings, events, refs };
+}
+
+function nodeAtPath(root: Node, path: number[]): Node {
+  let node = root;
+  for (const index of path) node = node.childNodes[index];
+  return node;
+}
+
+function readFastBinding(binding: FastRowBinding, scope: Scope): unknown {
+  if (binding.plan.run) return binding.plan.run((name) => scope.$lookup(name));
+  return runExpr(scope, binding.src);
+}
+
+function applyFastBinding(binding: FastRowBinding, node: Node, value: unknown): unknown {
+  if (binding.name == null) {
+    writeText(node as Text, value);
+    return value;
+  }
+  const el = node as Element;
+  if (binding.name === "class") {
+    const next = [binding.base, classToString(value)].filter(Boolean).join(" ");
+    if (el.getAttribute("class") !== next) {
+      if (next) el.setAttribute("class", next);
+      else el.removeAttribute("class");
+    }
+    return next;
+  }
+  if (binding.name === "style") {
+    const next = styleToString(value);
+    if (el.getAttribute("style") !== next) {
+      if (next) el.setAttribute("style", next);
+      else el.removeAttribute("style");
+    }
+    return next;
+  }
+  applyAttr(el, binding.name, value);
+  return value;
+}
+
+function fastRowRenderer(node: ElNode): (parent: Node, scope: Scope, ctx: CompileContext) => void {
+  let cachedScopeId: string | undefined;
+  let cached: FastRowPlan | undefined;
+  return (parent, scope, ctx) => {
+    if (!cached || cachedScopeId !== ctx.scopeId) {
+      cachedScopeId = ctx.scopeId;
+      cached = createFastRowPlan(node, ctx.scopeId);
+    }
+    const root = cached.root.cloneNode(true) as Element;
+    const bindingNodes = cached.bindings.map((binding) => nodeAtPath(root, binding.path));
+    for (const event of cached.events) {
+      bindEvent(nodeAtPath(root, event.path) as Element, event.event, event.src, scope, event.mods);
+    }
+    for (const ref of cached.refs) bindRef(nodeAtPath(root, ref.path) as Element, ref.name, scope);
+
+    if (cached.bindings.length) {
+      const values = new Array<unknown>(cached.bindings.length);
+      let initialized = false;
+      const plan = cached;
+      addSite(ctx, {
+        kind: "attr",
+        node: root,
+        label: "repeat row bindings",
+        rank: Rank.Expr,
+        run() {
+          if (this.dead) return;
+          const engine = ctx.engine;
+          if (this.linked && !engine.stale(this)) {
+            engine.stats.skipClock += 1;
+            return;
+          }
+          engine.startTrack();
+          try {
+            for (let i = 0; i < plan.bindings.length; i++) {
+              const binding = plan.bindings[i];
+              const value = readFastBinding(binding, scope);
+              const normalized =
+                binding.name === "class"
+                  ? [binding.base, classToString(value)].filter(Boolean).join(" ")
+                  : binding.name === "style"
+                    ? styleToString(value)
+                    : value;
+              if (!initialized || !Object.is(normalized, values[i])) {
+                values[i] = applyFastBinding(binding, bindingNodes[i], value);
+                engine.stats.patch += 1;
+              } else {
+                engine.stats.skipEqual += 1;
+              }
+            }
+          } catch (error) {
+            console.error(error);
+          } finally {
+            engine.commitTrack(this, engine.stopTrack());
+          }
+          initialized = true;
+        },
+      });
+    }
+    parent.appendChild(root);
+  };
 }
 
 function rowRenderer(node: ElNode): (parent: Node, scope: Scope, ctx: CompileContext) => void {
+  if (isFastRowTree(node)) return fastRowRenderer(node);
   if (isAotNative(node)) {
     const body = generateRenderBody([node]);
     const fn = new Function("__rt", "parent", "s", "ctx", body);
@@ -388,9 +619,11 @@ function reconcileRepeat(
 ): void {
   const used = new Set<string>();
   const ordered: RepeatRow[] = [];
+  const oldPositions: number[] = [];
   let created = false;
   let removed = false;
   let moved = false;
+  let reused = 0;
 
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
@@ -400,6 +633,7 @@ function reconcileRepeat(
     let row = rows.get(key);
     if (!row) {
       created = true;
+      oldPositions.push(-1);
       const inst = ctx.instance.child();
       const liveScope = scope.$child({ [parsed.item]: item, [parsed.index]: index });
       const holder = document.createDocumentFragment();
@@ -407,6 +641,8 @@ function reconcileRepeat(
       row = { key, inst, nodes: [...holder.childNodes], scope: liveScope, item, index };
       rows.set(key, row);
     } else {
+      reused += 1;
+      oldPositions.push(row.index);
       if (!Object.is(row.item, item)) {
         row.item = item;
         row.scope[parsed.item] = item;
@@ -429,7 +665,7 @@ function reconcileRepeat(
   }
 
   if (!created && !removed && !moved) return;
-  patchRepeatDom(start, end, ordered);
+  patchRepeatDom(end, ordered, oldPositions, reused);
 }
 
 function bindRepeat(el: Element, scope: Scope, ctx: CompileContext): void {
