@@ -1,7 +1,7 @@
 import { Tee } from "tee-framework";
-import App from "./App.tee";
+import { appOptions } from "./app.js";
 
 Tee.create({
   el: "#main",
-  ...App,
+  ...appOptions,
 });

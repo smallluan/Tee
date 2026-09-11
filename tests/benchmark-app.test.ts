@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import App from "../bench/js-framework-benchmark/keyed/tee/src/App.tee";
-import { Tee } from "tee";
+import { appOptions } from "../bench/js-framework-benchmark/keyed/tee/src/app.js";
 import { mount, tick } from "./helpers";
 
 function tags(root: Element, selector: string) {
@@ -9,7 +8,7 @@ function tags(root: Element, selector: string) {
 
 describe("js-framework-benchmark keyed app", () => {
   it("matches the required row HTML and stays keyed", async () => {
-    const { app, host } = mount({ ...App });
+    const { app, host } = mount({ ...appOptions });
 
     expect(host.querySelector("#run")?.id).toBe("run");
     expect(host.querySelector("#runlots")).toBeTruthy();

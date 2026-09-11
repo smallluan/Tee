@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +26,7 @@ Example (your machine):
 
 const dest = join(benchmarkRoot, "frameworks", "keyed", "tee");
 mkdirSync(dirname(dest), { recursive: true });
+rmSync(dest, { recursive: true, force: true });
 cpSync(source, dest, { recursive: true });
 
 const pkgPath = join(dest, "package.json");

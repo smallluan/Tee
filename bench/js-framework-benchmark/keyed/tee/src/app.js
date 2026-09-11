@@ -1,0 +1,94 @@
+import { buildData } from "./data.js";
+
+export const appOptions = {
+  data: () => ({
+    rows: [],
+    selected: null,
+  }),
+  methods: {
+    run() {
+      this.rows = buildData(1000);
+      this.selected = null;
+    },
+    runLots() {
+      this.rows = buildData(10000);
+      this.selected = null;
+    },
+    add() {
+      this.rows = this.rows.concat(buildData(1000));
+    },
+    update() {
+      const rows = this.rows;
+      for (let i = 0; i < rows.length; i += 10) {
+        rows[i].label += " !!!";
+      }
+    },
+    clear() {
+      this.rows = [];
+      this.selected = null;
+    },
+    remove(id) {
+      this.rows = this.rows.filter((row) => row.id !== id);
+    },
+    swapRows() {
+      const rows = this.rows.slice();
+      if (rows.length > 998) {
+        const a = rows[1];
+        rows[1] = rows[998];
+        rows[998] = a;
+        this.rows = rows;
+      }
+    },
+    select(id) {
+      this.selected = id;
+    },
+  },
+  template: `
+    <div class="jumbotron">
+      <div class="row">
+        <div class="col-md-6">
+          <h1>Tee</h1>
+        </div>
+        <div class="col-md-6">
+          <div class="row">
+            <div class="col-sm-6 smallpad">
+              <button type="button" class="btn btn-primary btn-block" id="run" t-on:click="run()">Create 1,000 rows</button>
+            </div>
+            <div class="col-sm-6 smallpad">
+              <button type="button" class="btn btn-primary btn-block" id="runlots" t-on:click="runLots()">Create 10,000 rows</button>
+            </div>
+            <div class="col-sm-6 smallpad">
+              <button type="button" class="btn btn-primary btn-block" id="add" t-on:click="add()">Append 1,000 rows</button>
+            </div>
+            <div class="col-sm-6 smallpad">
+              <button type="button" class="btn btn-primary btn-block" id="update" t-on:click="update()">Update every 10th row</button>
+            </div>
+            <div class="col-sm-6 smallpad">
+              <button type="button" class="btn btn-primary btn-block" id="clear" t-on:click="clear()">Clear</button>
+            </div>
+            <div class="col-sm-6 smallpad">
+              <button type="button" class="btn btn-primary btn-block" id="swaprows" t-on:click="swapRows()">Swap Rows</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <table class="table table-hover table-striped test-data">
+      <tbody>
+        <tr t-repeat="item in rows" t-key="item.id" t-bind:class="item.id === selected ? 'danger' : ''">
+          <td class="col-md-1">{{ item.id }}</td>
+          <td class="col-md-4">
+            <a t-on:click="select(item.id)">{{ item.label }}</a>
+          </td>
+          <td class="col-md-1">
+            <a t-on:click="remove(item.id)">
+              <span class="glyphicon glyphicon-remove" aria-hidden="true"></span>
+            </a>
+          </td>
+          <td class="col-md-6"></td>
+        </tr>
+      </tbody>
+    </table>
+    <span class="preloadicon glyphicon glyphicon-remove" aria-hidden="true"></span>
+  `,
+};
