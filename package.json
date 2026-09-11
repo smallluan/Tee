@@ -1,6 +1,6 @@
 {
   "name": "tee-framework",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "Tee — a point-to-point reactive frontend framework driven by bidirectional DOM maps, not a virtual DOM.",
   "type": "module",
   "main": "./dist/index.js",
@@ -33,7 +33,7 @@
   "scripts": {
     "dev": "vite --port 43151 --host 0.0.0.0",
     "build": "vite build --config vite.lib.config.ts && tsc -p tsconfig.build.json --noCheck && npm run build:editor",
-    "build:editor": "node scripts/build-editor.mjs",
+    "build:editor": "node scripts/build-editor.mjs && node scripts/pack-tee-vsix.mjs",
     "build:demo": "vite build",
     "preview": "vite preview --port 43151 --host 0.0.0.0",
     "test": "vitest run",

@@ -5,42 +5,32 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const vsix = join(root, "editor", "tee-language.vsix");
 const ext = join(root, "editor", "vscode-tee");
 
-if (!existsSync(join(ext, "package.json"))) {
-  console.error("tee-editor: missing editor/vscode-tee");
-  process.exit(1);
+if (!existsSync(vsix) && existsSync(join(ext, "package.json"))) {
+  spawnSync(process.execPath, [join(root, "scripts", "pack-tee-vsix.mjs")], { stdio: "inherit" });
 }
 
-const bins = ["cursor", "code"];
+const target = existsSync(vsix) ? vsix : ext;
+const bins = process.platform === "win32" ? ["cursor.cmd", "code.cmd", "cursor", "code"] : ["cursor", "code"];
+
 for (const bin of bins) {
-  const probe = spawnSync(bin, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(bin, ["--version"], { encoding: "utf8", shell: process.platform === "win32" });
   if (probe.error || probe.status !== 0) continue;
-  const vsix = spawnSync("npx", ["--yes", "@vscode/vsce", "package", "--no-dependencies", "--skip-license", "--out", join(root, "tee-language.vsix")], {
-    cwd: ext,
-    encoding: "utf8",
-  });
-  if (vsix.status !== 0) {
-    console.log(`Open Cursor / VS Code Command Palette:
-  Developer: Install Extension from Location…
-  → ${ext}
-`);
-    process.exit(0);
-  }
-  const inst = spawnSync(bin, ["--install-extension", join(root, "tee-language.vsix"), "--force"], { encoding: "utf8" });
+  const args = existsSync(vsix) ? ["--install-extension", vsix, "--force"] : ["--install-extension", ext, "--force"];
+  const inst = spawnSync(bin, args, { encoding: "utf8", shell: process.platform === "win32" });
   if (inst.status === 0) {
-    console.log(`Installed Tee language support with ${bin}. Reload the window, then open a .tee file.`);
+    console.log(`Installed Tee language support with ${bin}. Reload the window, then reopen *.tee files.`);
     process.exit(0);
   }
 }
 
-console.log(`Tee language support lives at:
+console.log(`Install Tee highlighting (required, otherwise .tee is plain text):
 
-  ${ext}
+  Command Palette → Extensions: Install from VSIX…
+  → ${target}
 
-In Cursor / VS Code:
-  Command Palette → Developer: Install Extension from Location…
-  choose that folder, then reload the window.
-
-*.tee files must use the Tee language (not HTML) so {{ }} and t-if are expressions, and <script> is TypeScript.
+Then reload VS Code / Cursor. The tab icon is a gold T on ink, not a generic text file.
 `);
+process.exit(0);

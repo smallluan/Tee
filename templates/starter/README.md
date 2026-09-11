@@ -11,6 +11,7 @@ npm run dev
 
 - `src/App.tee` — 模板 / setup 脚本 / Less（scoped）
 - `src/main.ts` — `Tee.create`
-- `.vscode/settings.json` — `*.tee` 关联 Tee 语言（不要用 HTML，否则 `{{ }}` / `t-if` 会变成普通字符串）
+- `.vscode/settings.json` — `*.tee` 关联 Tee 语言
+- `.vscode/tee-language.vsix` — 语言扩展（高亮、补全、T 形文件图标）
 
-打开 `App.tee` 之前，把语言扩展装上：Command Palette → **Developer: Install Extension from Location…** → `node_modules/tee-framework/editor/vscode-tee`，然后 reload。这样 `import { setup } from "tee-framework"` 有补全，模板里的插值和 `t-*` 按表达式高亮。
+打开 `App.tee` 之前装扩展，否则文件是纯文本：Command Palette → **Extensions: Install from VSIX…** → `.vscode/tee-language.vsix`，然后 reload。`npm install` 也会尝试自动安装。

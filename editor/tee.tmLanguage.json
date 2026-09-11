@@ -80,7 +80,7 @@
       "endCaptures": { "0": { "name": "punctuation.definition.string.end.html" } },
       "name": "meta.directive.tee",
       "contentName": "source.ts",
-      "patterns": [{ "include": "source.ts" }]
+      "patterns": [{ "include": "source.ts" }, { "include": "#expr-lite" }]
     },
     "directive-attr-squote": {
       "begin": "\\b(t-[\\w.:-]+)(\\s*=\\s*)(')",
@@ -93,7 +93,7 @@
       "endCaptures": { "0": { "name": "punctuation.definition.string.end.html" } },
       "name": "meta.directive.tee",
       "contentName": "source.ts",
-      "patterns": [{ "include": "source.ts" }]
+      "patterns": [{ "include": "source.ts" }, { "include": "#expr-lite" }]
     },
     "directive-bare": {
       "match": "\\b(t-(?:else|pre|once|cloak))\\b",
@@ -133,7 +133,10 @@
       "endCaptures": { "0": { "name": "punctuation.definition.interpolation.end.tee" } },
       "name": "meta.interpolation.tee",
       "contentName": "source.ts",
-      "patterns": [{ "include": "source.ts" }]
+      "patterns": [
+        { "include": "source.ts" },
+        { "include": "#expr-lite" }
+      ]
     },
     "script": {
       "begin": "(<)(script)([^>]*)(>)",
@@ -151,7 +154,7 @@
       },
       "name": "source.ts.embedded.tee",
       "contentName": "source.ts",
-      "patterns": [{ "include": "source.ts" }]
+      "patterns": [{ "include": "source.ts" }, { "include": "#expr-lite" }]
     },
     "style-less": {
       "begin": "(<)(style)(?=[^>]*lang\\s*=\\s*['\"]less['\"])([^>]*)(>)",
@@ -193,6 +196,17 @@
       "name": "source.css.embedded.tee",
       "contentName": "source.css",
       "patterns": [{ "include": "source.css" }]
+    },
+    "expr-lite": {
+      "patterns": [
+        { "match": "\\b(true|false|null|undefined|NaN|Infinity)\\b", "name": "constant.language.tee" },
+        { "match": "\\b(new|typeof|void|in|of|instanceof|return|await)\\b", "name": "keyword.operator.tee" },
+        { "match": "'[^']*'", "name": "string.quoted.single.tee" },
+        { "match": "\"[^\"]*\"", "name": "string.quoted.double.tee" },
+        { "match": "\\b\\d+(\\.\\d+)?\\b", "name": "constant.numeric.tee" },
+        { "match": "\\b(self|this)\\b", "name": "variable.language.tee" },
+        { "match": "\\b[A-Za-z_$][\\w$]*\\b", "name": "variable.other.tee" }
+      ]
     }
   }
 }

@@ -1,14 +1,15 @@
 {
   "name": "tee-language",
   "displayName": "Tee",
-  "description": "Language support for Tee `.tee` single-file components: TypeScript in <script>, expressions in {{ }} and t-* directives.",
-  "version": "0.8.3",
+  "description": "Syntax, IntelliSense, and file icon for Tee `.tee` single-file components.",
+  "version": "0.8.4",
   "publisher": "tee",
+  "icon": "icons/tee.png",
   "engines": {
     "vscode": "^1.80.0"
   },
   "categories": ["Programming Languages"],
-  "activationEvents": ["onLanguage:tee"],
+  "activationEvents": ["onLanguage:tee", "workspaceContains:**/*.tee"],
   "main": "./extension.cjs",
   "contributes": {
     "languages": [
@@ -16,7 +17,11 @@
         "id": "tee",
         "aliases": ["Tee", "tee"],
         "extensions": [".tee"],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/tee-file-light.svg",
+          "dark": "./icons/tee-file-dark.svg"
+        }
       }
     ],
     "grammars": [
@@ -33,6 +38,28 @@
           "text.html.tee": "html"
         }
       }
-    ]
+    ],
+    "snippets": [
+      {
+        "language": "tee",
+        "path": "./snippets/tee.json"
+      }
+    ],
+    "configurationDefaults": {
+      "files.associations": {
+        "*.tee": "tee"
+      },
+      "[tee]": {
+        "editor.quickSuggestions": {
+          "other": true,
+          "comments": false,
+          "strings": true
+        },
+        "editor.wordBasedSuggestions": "off"
+      },
+      "emmet.includeLanguages": {
+        "tee": "html"
+      }
+    }
   }
 }

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --port 43152 --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview --port 43152 --host 0.0.0.0"
+    "preview": "vite preview --port 43152 --host 0.0.0.0",
+    "postinstall": "node ./node_modules/tee-framework/scripts/install-tee-editor.mjs"
   },
   "dependencies": {
     "tee-framework": "file:../.."

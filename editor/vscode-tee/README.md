@@ -1,19 +1,25 @@
 # Tee for VS Code / Cursor
 
-`.tee` is its own language, not HTML:
+`.tee` 必须装这个扩展。不装的话 VS Code 会把 `.tee` 当成纯文本：全白、没有补全、标签页是普通文本图标。
 
-- `<script>` is TypeScript — `import { setup, computed } from "tee-framework"` completes, hover shows signatures
-- `{{ guest }}` and `t-if="count === 0"` are TypeScript expressions, not strings
-- `t-if` / `t-repeat` / `t-on:click` complete on tags
+## 安装（稳定版 VS Code 用这条）
 
-## Install
+1. Command Palette → **Extensions: Install from VSIX…**
+2. 选 `editor/tee-language.vsix`（应用里是 `.vscode/tee-language.vsix` 或 `node_modules/tee-framework/editor/tee-language.vsix`）
+3. Reload Window
+4. 打开 `App.tee`，右下角语言是 **Tee**，标签页图标是墨色底上的金色 **T**
 
-Command Palette → **Developer: Install Extension from Location…** → this folder (`editor/vscode-tee`).
+也可以：
 
-Then reload the window. Workspace settings map `*.tee` → `tee`. If a file is still HTML, click the language mode in the status bar and pick **Tee**.
-
-From a Tee app after `npm install`:
-
+```bash
+npx tee-editor
 ```
-node_modules/tee-framework/editor/vscode-tee
-```
+
+或 `code --install-extension node_modules/tee-framework/editor/tee-language.vsix`
+
+## 会得到什么
+
+- 模板 / 脚本 / Less 高亮；`{{ }}` 和 `t-if="…"` 是表达式，不是字符串
+- `import { setup, computed } from "tee-framework"` 补全
+- 模板里补全 `self` 上的字段和 `t-*` 指令
+- 专用 `.tee` 文件图标
