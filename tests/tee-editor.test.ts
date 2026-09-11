@@ -101,25 +101,66 @@ describe("tee virtual document", () => {
 
 describe("tee language service", () => {
   it("completes tee-framework exports, self fields, template names, and t-* directives", () => {
-    const project = createTeeLanguageProject(null, process.cwd());
+    const project = createTeeLanguageProject(process.cwd());
     const file = `${process.cwd()}/tests/fixtures/hint-sample.tee`;
-    project.upsert(file, setupSfc);
+    const typingImport = setupSfc.replace(
+      "import { setup, computed, watch, onMounted }",
+      "import {  }",
+    );
+    project.upsert(file, typingImport);
 
-    const imported = project.completions(file, at(setupSfc, "import { ") + "import { ".length);
+    const imported = project.completions(file, at(typingImport, "import { ") + "import { ".length);
     const importedNames = imported.map((c) => c.name);
     expect(importedNames).toEqual(expect.arrayContaining(["setup", "computed", "watch", "onMounted"]));
 
+    project.upsert(file, setupSfc);
     const selfDot = project.completions(file, at(setupSfc, "self.guest") + "self.".length);
     expect(selfDot.map((c) => c.name)).toEqual(expect.arrayContaining(["$refs", "$emit", "$nextTick"]));
 
     const interp = project.completions(file, at(setupSfc, "{{ guest") + 3);
     expect(interp.map((c) => c.name)).toEqual(expect.arrayContaining(["guest", "count", "bump", "label"]));
 
-    const directives = project.completions(file, at(setupSfc, "<p ") + 3);
+    const typingAttribute = setupSfc.replace('<p t-if="count === 0"', "<p ");
+    project.upsert(file, typingAttribute);
+    const directives = project.completions(file, at(typingAttribute, "<p ") + 3);
     expect(directives.map((c) => c.name)).toEqual(expect.arrayContaining(["t-if", "t-on:click", "t-repeat"]));
 
+    project.upsert(file, setupSfc);
     const hover = project.hover(file, at(setupSfc, "setup, computed"));
-    expect(hover?.text ?? "").toMatch(/self/);
+    expect(hover?.text ?? "").toMatch(/setup/);
+
+    project.dispose();
+  });
+
+  it("uses real HTML, TypeScript, and Less language services", () => {
+    const source = `<template>
+  <input 
+</template>
+<script lang="ts">
+const value = Math.
+</script>
+<style lang="less">
+.card {
+  col
+}
+</style>
+`;
+    const project = createTeeLanguageProject(process.cwd());
+    const file = `${process.cwd()}/tests/fixtures/all-languages.tee`;
+    const tagSource = "<template>\n  <\n</template>";
+    project.upsert(file, tagSource);
+    const tags = project.completions(file, at(tagSource, "\n  <") + 4).map((item) => item.name);
+    expect(tags).toEqual(expect.arrayContaining(["div", "button", "input"]));
+
+    project.upsert(file, source);
+    const attrs = project.completions(file, at(source, "<input ") + 7).map((item) => item.name);
+    expect(attrs).toEqual(expect.arrayContaining(["class", "id", "placeholder"]));
+
+    const js = project.completions(file, at(source, "Math.") + 5).map((item) => item.name);
+    expect(js).toEqual(expect.arrayContaining(["max", "round", "random"]));
+
+    const less = project.completions(file, at(source, "  col") + 5).map((item) => item.name);
+    expect(less).toContain("color");
 
     project.dispose();
   });

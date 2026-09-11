@@ -2,7 +2,7 @@
   "name": "tee-language",
   "displayName": "Tee",
   "description": "Syntax, IntelliSense, and file icon for Tee `.tee` single-file components.",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "publisher": "tee",
   "icon": "icons/tee.png",
   "engines": {
