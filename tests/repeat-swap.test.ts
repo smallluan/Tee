@@ -29,6 +29,38 @@ describe("keyed t-repeat", () => {
     expect(after[2]).toBe(before[0]);
   });
 
+  it("still swaps in place after the list is replaced", async () => {
+    const { app, host } = mount({
+      template: `<li t-repeat="item in items" t-key="item.id">{{ item.name }}</li>`,
+      data: {
+        items: [
+          { id: 1, name: "a" },
+          { id: 2, name: "b" },
+          { id: 3, name: "c" },
+        ],
+      },
+    });
+    app.data.items = [
+      { id: 4, name: "d" },
+      { id: 5, name: "e" },
+      { id: 6, name: "f" },
+    ];
+    await tick(app);
+    const before = [...host.querySelectorAll("li")];
+    expect(before.map((el) => el.textContent)).toEqual(["d", "e", "f"]);
+
+    const items = app.data.items as Array<{ id: number; name: string }>;
+    const tmp = items[0];
+    items[0] = items[2];
+    items[2] = tmp;
+    await tick(app);
+
+    const after = [...host.querySelectorAll("li")];
+    expect(after.map((el) => el.textContent)).toEqual(["f", "e", "d"]);
+    expect(after[0]).toBe(before[2]);
+    expect(after[2]).toBe(before[0]);
+  });
+
   it("does not rewrite class when the class string is unchanged", async () => {
     const { app, host } = mount({
       template: `<p t-repeat="item in items" t-key="item.id" t-bind:class="{ on: item.id === selected }">{{ item.id }}</p>`,

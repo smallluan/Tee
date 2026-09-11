@@ -593,7 +593,7 @@ function applyReactive(
     return runExpr(scope, src);
   };
 
-  if (plan.stable && site.linked) {
+  if (plan.stable && site.linked && site.kind !== "repeat") {
     let value: unknown;
     try {
       value = read();
