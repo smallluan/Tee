@@ -727,7 +727,8 @@ function directBindingProp(binding: FastRowBinding, scope: Scope): string | null
 }
 
 function addSingleDirectRowSite(
-  ctx: CompileContext,
+  engine: Engine,
+  instance: Instance,
   root: Element,
   binding: FastRowBinding,
   node: Node,
@@ -736,7 +737,7 @@ function addSingleDirectRowSite(
   let value: unknown;
   let initialized = false;
   const site: Site = {
-    id: ctx.engine.nextSiteId(),
+    id: engine.nextSiteId(),
     kind: "attr",
     node: root,
     label: "repeat row bindings",
@@ -747,25 +748,26 @@ function addSingleDirectRowSite(
       if (!site.linked) {
         const prop = directBindingProp(binding, scope);
         if (prop == null) return;
-        ctx.engine.maps.linkOne(site, prop, binding.directPath!.at(-1)!);
+        engine.maps.linkOne(site, prop, binding.directPath!.at(-1)!);
         site.linked = true;
       }
       const next = readFastBinding(binding, scope);
       if (!initialized || !Object.is(next, value)) {
         value = applyFastBinding(binding, node, next);
-        ctx.engine.stats.patch += 1;
+        engine.stats.patch += 1;
       } else {
-        ctx.engine.stats.skipEqual += 1;
+        engine.stats.skipEqual += 1;
       }
       initialized = true;
     },
   };
-  ctx.instance.sites.push(site);
+  instance.sites.push(site);
   site.run();
 }
 
 function addDirectRowSite(
-  ctx: CompileContext,
+  engine: Engine,
+  instance: Instance,
   root: Element,
   bindings: FastRowBinding[],
   nodes: Node[],
@@ -774,7 +776,7 @@ function addDirectRowSite(
   const values = new Array<unknown>(bindings.length);
   let initialized = false;
   const site: Site = {
-    id: ctx.engine.nextSiteId(),
+    id: engine.nextSiteId(),
     kind: "attr",
     node: root,
     label: "repeat row bindings",
@@ -785,28 +787,29 @@ function addDirectRowSite(
       if (!site.linked) {
         const props = bindings.map((binding) => directBindingProp(binding, scope));
         if (props.some((prop) => prop == null)) return;
-        ctx.engine.maps.link(site, props as string[], bindings.map((binding) => binding.directPath!.at(-1)!));
+        engine.maps.link(site, props as string[], bindings.map((binding) => binding.directPath!.at(-1)!));
         site.linked = true;
       }
       for (let i = 0; i < bindings.length; i++) {
         const value = readFastBinding(bindings[i], scope);
         if (!initialized || !Object.is(value, values[i])) {
           values[i] = applyFastBinding(bindings[i], nodes[i], value);
-          ctx.engine.stats.patch += 1;
+          engine.stats.patch += 1;
         } else {
-          ctx.engine.stats.skipEqual += 1;
+          engine.stats.skipEqual += 1;
         }
       }
       initialized = true;
     },
   };
-  ctx.instance.sites.push(site);
+  instance.sites.push(site);
   site.run();
 }
 
 type RowRenderer = ((parent: Node, scope: Scope, ctx: CompileContext) => void) & {
   fastScope?: boolean;
   usesIndex?: boolean;
+  create?: (scope: Scope, ctx: CompileContext, instance: Instance) => Element;
 };
 
 function fastRowRenderer(
@@ -818,7 +821,7 @@ function fastRowRenderer(
 ): RowRenderer {
   let cachedScopeId: string | undefined;
   let cached: FastRowPlan | undefined;
-  const render: RowRenderer = (parent, scope, ctx) => {
+  const create = (scope: Scope, ctx: CompileContext, instance: Instance): Element => {
     if (!cached || cachedScopeId !== ctx.scopeId) {
       cachedScopeId = ctx.scopeId;
       cached = createFastRowPlan(node, ctx.scopeId, keyedClassSrc, keySrc, itemName);
@@ -839,7 +842,8 @@ function fastRowRenderer(
 
     if (reactiveBindings.length === 1 && reactiveBindings[0].directPath) {
       addSingleDirectRowSite(
-        ctx,
+        ctx.engine,
+        instance,
         root,
         reactiveBindings[0],
         nodeAtPath(root, reactiveBindings[0].path),
@@ -848,55 +852,59 @@ function fastRowRenderer(
     } else if (reactiveBindings.length) {
       const bindingNodes = reactiveBindings.map((binding) => nodeAtPath(root, binding.path));
       if (reactiveBindings.every((binding) => binding.directPath)) {
-        addDirectRowSite(ctx, root, reactiveBindings, bindingNodes, scope);
-        parent.appendChild(root);
-        return;
-      }
-      const values = new Array<unknown>(reactiveBindings.length);
-      let initialized = false;
-      addSite(ctx, {
-        kind: "attr",
-        node: root,
-        label: "repeat row bindings",
-        rank: Rank.Expr,
-        run() {
-          if (this.dead) return;
-          const engine = ctx.engine;
-          if (this.linked && !engine.stale(this)) {
-            engine.stats.skipClock += 1;
-            return;
-          }
-          engine.startTrack();
-          try {
-            for (let i = 0; i < reactiveBindings.length; i++) {
-              const binding = reactiveBindings[i];
-              const value = readFastBinding(binding, scope);
-              const normalized =
-                binding.name === "class"
-                  ? [binding.base, classToString(value)].filter(Boolean).join(" ")
-                  : binding.name === "style"
-                    ? styleToString(value)
-                    : value;
-              if (!initialized || !Object.is(normalized, values[i])) {
-                values[i] = applyFastBinding(binding, bindingNodes[i], value);
-                engine.stats.patch += 1;
-              } else {
-                engine.stats.skipEqual += 1;
-              }
+        addDirectRowSite(ctx.engine, instance, root, reactiveBindings, bindingNodes, scope);
+      } else {
+        const values = new Array<unknown>(reactiveBindings.length);
+        let initialized = false;
+        addSite(instance === ctx.instance ? ctx : { ...ctx, instance }, {
+          kind: "attr",
+          node: root,
+          label: "repeat row bindings",
+          rank: Rank.Expr,
+          run() {
+            if (this.dead) return;
+            const engine = ctx.engine;
+            if (this.linked && !engine.stale(this)) {
+              engine.stats.skipClock += 1;
+              return;
             }
-          } catch (error) {
-            console.error(error);
-          } finally {
-            engine.commitTrack(this, engine.stopTrack());
-          }
-          initialized = true;
-        },
-      });
+            engine.startTrack();
+            try {
+              for (let i = 0; i < reactiveBindings.length; i++) {
+                const binding = reactiveBindings[i];
+                const value = readFastBinding(binding, scope);
+                const normalized =
+                  binding.name === "class"
+                    ? [binding.base, classToString(value)].filter(Boolean).join(" ")
+                    : binding.name === "style"
+                      ? styleToString(value)
+                      : value;
+                if (!initialized || !Object.is(normalized, values[i])) {
+                  values[i] = applyFastBinding(binding, bindingNodes[i], value);
+                  engine.stats.patch += 1;
+                } else {
+                  engine.stats.skipEqual += 1;
+                }
+              }
+            } catch (error) {
+              console.error(error);
+            } finally {
+              engine.commitTrack(this, engine.stopTrack());
+            }
+            initialized = true;
+          },
+        });
+      }
     }
-    parent.appendChild(root);
+    return root;
   };
+  const render = ((parent: Node, scope: Scope, ctx: CompileContext) => {
+    const root = create(scope, ctx, ctx.instance);
+    parent.appendChild(root);
+  }) as RowRenderer;
   render.fastScope = true;
   render.usesIndex = rowUsesIndex(node, indexName);
+  render.create = create;
   return render;
 }
 
@@ -984,6 +992,10 @@ function createRepeatRow(
   const liveScope = render.fastScope
     ? createFastRepeatScope(scope, parsed.item, parsed.index, item, index, inst)
     : createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst);
+  if (render.create) {
+    const root = render.create(liveScope, ctx, inst);
+    return { key, inst, nodes: [root], scope: liveScope, item, index };
+  }
   const holder = document.createDocumentFragment();
   render(holder, liveScope, { ...ctx, instance: inst });
   return { key, inst, nodes: [...holder.childNodes], scope: liveScope, item, index };
