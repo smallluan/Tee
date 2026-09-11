@@ -77,6 +77,15 @@ export function createRootScope(
 
 export const SCOPE_HOST = new WeakMap<Scope, Instance>();
 
+/** Repeat locals are explicitly invalidated by keyed reconciliation, so their frame does not need another Proxy. */
+export function createRepeatScope(
+  parent: Scope,
+  locals: Record<string, unknown>,
+  instance: Instance,
+): Scope {
+  return makeScope(parent.$engine, locals, {}, parent, instance);
+}
+
 export function defineComputed(
   instance: Instance,
   name: string,

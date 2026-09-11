@@ -140,10 +140,11 @@ describe("keyed t-repeat", () => {
   });
 
   it("groups native row bindings into one reactive site per row", () => {
-    const { app } = mount({
+    const { app, host } = mount({
       template:
-        `<p t-repeat="item in items" t-key="item.id" ` +
-        `t-bind:class="{ on: item.id === selected }">{{ item.id }} {{ item.name }}</p>`,
+        `<table><tbody><tr t-repeat="item in items" t-key="item.id" ` +
+        `t-bind:class="{ on: item.id === selected }">\n` +
+        `  <td>{{ item.id }}</td>\n  <td>{{ item.name }}</td>\n</tr></tbody></table>`,
       data: {
         selected: 1,
         items: [
@@ -157,5 +158,25 @@ describe("keyed t-repeat", () => {
     const sites = app.maps().reverse;
     expect(sites.filter((site) => site.label === "repeat row bindings")).toHaveLength(3);
     expect(sites).toHaveLength(4);
+    expect(host.querySelector("tr")?.childNodes).toHaveLength(2);
+  });
+
+  it("updates fast row bindings when an item is replaced under the same key", async () => {
+    const { app, host } = mount({
+      template: `<p t-repeat="item in items" t-key="item.id">{{ item.name }}-{{ index }}</p>`,
+      data: {
+        items: [
+          { id: 1, name: "a" },
+          { id: 2, name: "b" },
+        ],
+      },
+    });
+    const before = host.querySelectorAll("p")[0];
+
+    (app.data.items as Array<{ id: number; name: string }>)[0] = { id: 1, name: "next" };
+    await tick(app);
+
+    expect(host.querySelectorAll("p")[0]).toBe(before);
+    expect(before.textContent).toBe("next-0");
   });
 });

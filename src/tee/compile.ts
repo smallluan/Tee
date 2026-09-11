@@ -5,7 +5,7 @@ import { compileExpr } from "./ir";
 import { generateRenderBody, isAotNative } from "./codegen";
 import { Instance } from "./instance";
 import { touchList } from "./observe";
-import { runExpr, runStatement, type Scope, createRootScope } from "./scope";
+import { runExpr, runStatement, type Scope, createRootScope, createRepeatScope } from "./scope";
 import { runSetup } from "./chart";
 import { Rank, rankOf } from "./strata";
 import type { Site, TagDef } from "./types";
@@ -477,14 +477,19 @@ function createFastRowPlan(node: ElNode, scopeId: string | undefined): FastRowPl
         refs.push({ path, name: attr.value });
       }
     }
-    for (let i = 0; i < current.children.length; i++) {
-      el.appendChild(build(current.children[i], [...path, i]));
+    let childIndex = 0;
+    for (const child of current.children) {
+      if (TABLE_CONTAINERS.has(current.tag) && child.t === "text" && !child.value.trim()) continue;
+      el.appendChild(build(child, [...path, childIndex]));
+      childIndex += 1;
     }
     return el;
   };
 
   return { root: build(node, []) as Element, bindings, events, refs };
 }
+
+const TABLE_CONTAINERS = new Set(["table", "thead", "tbody", "tfoot", "tr", "colgroup"]);
 
 function nodeAtPath(root: Node, path: number[]): Node {
   let node = root;
@@ -635,7 +640,7 @@ function reconcileRepeat(
       created = true;
       oldPositions.push(-1);
       const inst = ctx.instance.child();
-      const liveScope = scope.$child({ [parsed.item]: item, [parsed.index]: index });
+      const liveScope = createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst);
       const holder = document.createDocumentFragment();
       render(holder, liveScope, { ...ctx, instance: inst });
       row = { key, inst, nodes: [...holder.childNodes], scope: liveScope, item, index };
@@ -643,15 +648,19 @@ function reconcileRepeat(
     } else {
       reused += 1;
       oldPositions.push(row.index);
+      let localsChanged = false;
       if (!Object.is(row.item, item)) {
         row.item = item;
         row.scope[parsed.item] = item;
+        localsChanged = true;
       }
       if (row.index !== index) {
         moved = true;
         row.index = index;
         row.scope[parsed.index] = index;
+        localsChanged = true;
       }
+      if (localsChanged) for (const site of row.inst.sites) ctx.engine.mark(site);
     }
     ordered.push(row);
   }
