@@ -920,7 +920,7 @@ function reconcileRepeat(
     if (!row) {
       created = true;
       oldPositions.push(-1);
-      const inst = ctx.instance.child();
+      const inst = ctx.instance.child(Boolean(render.fastScope));
       const liveScope = render.fastScope
         ? createFastRepeatScope(scope, parsed.item, parsed.index, item, index, inst)
         : createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst);
