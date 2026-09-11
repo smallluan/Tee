@@ -205,7 +205,7 @@ class Gen {
   }
 }
 
-function isAotNative(node: ElNode): boolean {
+export function isAotNative(node: ElNode): boolean {
   if (!NATIVE.has(node.tag)) return false;
   for (const attr of node.attrs) {
     if (
