@@ -490,6 +490,8 @@ type FastRowBinding = {
   base: string;
   plan: ReturnType<typeof compileExpr>;
   mode: "reactive" | "once" | "skip";
+  directPath: string[] | null;
+  directRoot: string | null;
 };
 
 type FastRowEvent = {
@@ -528,6 +530,7 @@ function createFastRowPlan(
   scopeId: string | undefined,
   keyedClassSrc: string | null,
   keySrc: string | null,
+  itemName: string,
 ): FastRowPlan {
   const bindings: FastRowBinding[] = [];
   const events: FastRowEvent[] = [];
@@ -543,6 +546,8 @@ function createFastRowPlan(
         base: "",
         plan: compileExpr(current.src),
         mode: current.src === keySrc ? "once" : "reactive",
+        directPath: directItemPath(current.src, itemName),
+        directRoot: directItemPath(current.src, itemName) ? itemName : null,
       });
       return document.createTextNode("");
     }
@@ -568,6 +573,8 @@ function createFastRowPlan(
               : attr.value === keySrc
                 ? "once"
                 : "reactive",
+          directPath: directItemPath(attr.value, itemName),
+          directRoot: directItemPath(attr.value, itemName) ? itemName : null,
         });
       } else if (attr.kind === "ref") {
         refs.push({ path, name: attr.value });
@@ -600,6 +607,12 @@ function createFastRowPlan(
 
 const TABLE_CONTAINERS = new Set(["table", "thead", "tbody", "tfoot", "tr", "colgroup"]);
 
+function directItemPath(src: string, itemName: string): string[] | null {
+  const match = src.trim().match(/^([A-Za-z_$][\w$]*)(?:\.([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*))$/);
+  if (!match || match[1] !== itemName || !match[2]) return null;
+  return match[2].split(".");
+}
+
 function nodeAtPath(root: Node, path: number[]): Node {
   let node = root;
   for (const index of path) node = node.childNodes[index];
@@ -607,6 +620,11 @@ function nodeAtPath(root: Node, path: number[]): Node {
 }
 
 function readFastBinding(binding: FastRowBinding, scope: Scope): unknown {
+  if (binding.directPath) {
+    let value = scope.$lookup(binding.directRoot!);
+    for (const part of binding.directPath) value = (value as Record<string, unknown> | null)?.[part];
+    return value;
+  }
   if (binding.plan.run) return binding.plan.run((name) => scope.$lookup(name));
   return runExpr(scope, binding.src);
 }
@@ -637,6 +655,58 @@ function applyFastBinding(binding: FastRowBinding, node: Node, value: unknown): 
   return value;
 }
 
+function directBindingProp(binding: FastRowBinding, scope: Scope): string | null {
+  if (!binding.directPath || !binding.directRoot) return null;
+  let owner = scope.$lookup(binding.directRoot);
+  for (let i = 0; i < binding.directPath.length - 1; i++) {
+    owner = (owner as Record<string, unknown> | null)?.[binding.directPath[i]];
+  }
+  if (owner == null || typeof owner !== "object") return null;
+  const id = (owner as { __teeId?: string }).__teeId;
+  return id ? `${id}.${binding.directPath[binding.directPath.length - 1]}` : null;
+}
+
+function addDirectRowSite(
+  ctx: CompileContext,
+  root: Element,
+  bindings: FastRowBinding[],
+  nodes: Node[],
+  scope: Scope,
+): void {
+  const values = new Array<unknown>(bindings.length);
+  let initialized = false;
+  const site: Site = {
+    id: ctx.engine.nextSiteId(),
+    kind: "attr",
+    node: root,
+    label: "repeat row bindings",
+    rank: Rank.Leaf,
+    run() {
+      if (site.dead) return;
+      if (!site.linked) {
+        const props = bindings.map((binding) => directBindingProp(binding, scope));
+        if (props.some((prop) => prop == null)) return;
+        ctx.engine.maps.link(site, props as string[], bindings.map((binding) => binding.directPath!.at(-1)!));
+        ctx.engine.capture(site);
+        site.linked = true;
+      }
+      for (let i = 0; i < bindings.length; i++) {
+        const value = readFastBinding(bindings[i], scope);
+        if (!initialized || !Object.is(value, values[i])) {
+          values[i] = applyFastBinding(bindings[i], nodes[i], value);
+          ctx.engine.stats.patch += 1;
+        } else {
+          ctx.engine.stats.skipEqual += 1;
+        }
+      }
+      initialized = true;
+      ctx.engine.touch(site);
+    },
+  };
+  ctx.instance.sites.push(site);
+  site.run();
+}
+
 type RowRenderer = ((parent: Node, scope: Scope, ctx: CompileContext) => void) & {
   fastScope?: boolean;
 };
@@ -645,13 +715,14 @@ function fastRowRenderer(
   node: ElNode,
   keyedClassSrc: string | null,
   keySrc: string | null,
+  itemName: string,
 ): RowRenderer {
   let cachedScopeId: string | undefined;
   let cached: FastRowPlan | undefined;
   const render: RowRenderer = (parent, scope, ctx) => {
     if (!cached || cachedScopeId !== ctx.scopeId) {
       cachedScopeId = ctx.scopeId;
-      cached = createFastRowPlan(node, ctx.scopeId, keyedClassSrc, keySrc);
+      cached = createFastRowPlan(node, ctx.scopeId, keyedClassSrc, keySrc, itemName);
     }
     const root = cached.root.cloneNode(true) as Element;
     const reactiveBindings = cached.reactiveBindings;
@@ -665,7 +736,9 @@ function fastRowRenderer(
       applyFastBinding(binding, nodeAtPath(root, binding.path), readFastBinding(binding, scope));
     }
 
-    if (reactiveBindings.length) {
+    if (reactiveBindings.length && reactiveBindings.every((binding) => binding.directPath)) {
+      addDirectRowSite(ctx, root, reactiveBindings, bindingNodes, scope);
+    } else if (reactiveBindings.length) {
       const values = new Array<unknown>(reactiveBindings.length);
       let initialized = false;
       addSite(ctx, {
@@ -717,8 +790,9 @@ function rowRenderer(
   node: ElNode,
   keyedClassSrc: string | null = null,
   keySrc: string | null = null,
+  itemName = "item",
 ): RowRenderer {
-  if (isFastRowTree(node)) return fastRowRenderer(node, keyedClassSrc, keySrc);
+  if (isFastRowTree(node)) return fastRowRenderer(node, keyedClassSrc, keySrc, itemName);
   if (isAotNative(node)) {
     const body = generateRenderBody([node]);
     const fn = new Function("__rt", "parent", "s", "ctx", body);
@@ -1299,7 +1373,7 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
   parent.appendChild(end);
   const rows = new Map<string, RepeatRow>();
   const classPlan = keyedClassPlan(stripped, parsed.item, keySrc);
-  const render = rowRenderer(stripped, classPlan?.src ?? null, keySrc);
+  const render = rowRenderer(stripped, classPlan?.src ?? null, keySrc, parsed.item);
   let selectedKey: string | null = null;
   let syncSelectedRow = () => undefined;
 
