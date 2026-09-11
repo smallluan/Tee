@@ -156,7 +156,9 @@ describe("keyed t-repeat", () => {
     });
 
     const sites = app.maps().reverse;
-    expect(sites.filter((site) => site.label === "repeat row bindings")).toHaveLength(3);
+    const rowSites = sites.filter((site) => site.label === "repeat row bindings");
+    expect(rowSites).toHaveLength(3);
+    expect(rowSites.every((site) => !site.debugProps.includes("item"))).toBe(true);
     expect(sites.filter((site) => site.label === "keyed class selected")).toHaveLength(1);
     expect(sites).toHaveLength(5);
     expect(host.querySelector("tr")?.childNodes).toHaveLength(2);

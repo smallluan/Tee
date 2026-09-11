@@ -1,11 +1,18 @@
 import { display, isBooleanAttr, parseRepeat, splitInterpolation, writeText } from "./expr";
 import type { Engine } from "./engine";
 import { attrValue, isVoidTag, parseHTML, staticAttrs, type ElNode, type TmplNode } from "./html";
-import { compileExpr } from "./ir";
+import { compileExpr, compileStmt } from "./ir";
 import { generateRenderBody, isAotNative } from "./codegen";
 import { Instance } from "./instance";
 import { touchList } from "./observe";
-import { runExpr, runStatement, type Scope, createRootScope, createRepeatScope } from "./scope";
+import {
+  runExpr,
+  runStatement,
+  type Scope,
+  createRootScope,
+  createRepeatScope,
+  createFastRepeatScope,
+} from "./scope";
 import { runSetup } from "./chart";
 import { Rank, rankOf } from "./strata";
 import type { Site, TagDef } from "./types";
@@ -431,12 +438,15 @@ type FastRowPlan = {
 };
 
 function isFastRowTree(node: TmplNode): boolean {
-  if (node.t !== "el") return true;
+  if (node.t === "live") return compileExpr(node.src).run != null;
+  if (node.t === "text") return true;
   if (!isAotNative(node)) return false;
   for (const attr of node.attrs) {
     if (attr.kind !== "static" && attr.kind !== "on" && attr.kind !== "bind" && attr.kind !== "ref") {
       return false;
     }
+    if (attr.kind === "bind" && !compileExpr(attr.value).run) return false;
+    if (attr.kind === "on" && compileStmt(attr.value).t === "raw") return false;
   }
   return node.children.every(isFastRowTree);
 }
@@ -549,13 +559,17 @@ function applyFastBinding(binding: FastRowBinding, node: Node, value: unknown): 
   return value;
 }
 
+type RowRenderer = ((parent: Node, scope: Scope, ctx: CompileContext) => void) & {
+  fastScope?: boolean;
+};
+
 function fastRowRenderer(
   node: ElNode,
   keyedClassSrc: string | null,
-): (parent: Node, scope: Scope, ctx: CompileContext) => void {
+): RowRenderer {
   let cachedScopeId: string | undefined;
   let cached: FastRowPlan | undefined;
-  return (parent, scope, ctx) => {
+  const render: RowRenderer = (parent, scope, ctx) => {
     if (!cached || cachedScopeId !== ctx.scopeId) {
       cachedScopeId = ctx.scopeId;
       cached = createFastRowPlan(node, ctx.scopeId, keyedClassSrc);
@@ -612,12 +626,14 @@ function fastRowRenderer(
     }
     parent.appendChild(root);
   };
+  render.fastScope = true;
+  return render;
 }
 
 function rowRenderer(
   node: ElNode,
   keyedClassSrc: string | null = null,
-): (parent: Node, scope: Scope, ctx: CompileContext) => void {
+): RowRenderer {
   if (isFastRowTree(node)) return fastRowRenderer(node, keyedClassSrc);
   if (isAotNative(node)) {
     const body = generateRenderBody([node]);
@@ -677,7 +693,7 @@ function reconcileRepeat(
   ctx: CompileContext,
   start: Node,
   end: Node,
-  render: (parent: Node, scope: Scope, ctx: CompileContext) => void,
+  render: RowRenderer,
 ): void {
   const used = new Set<string>();
   const ordered: RepeatRow[] = [];
@@ -697,7 +713,9 @@ function reconcileRepeat(
       created = true;
       oldPositions.push(-1);
       const inst = ctx.instance.child();
-      const liveScope = createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst);
+      const liveScope = render.fastScope
+        ? createFastRepeatScope(scope, parsed.item, parsed.index, item, index, inst)
+        : createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst);
       const holder = document.createDocumentFragment();
       render(holder, liveScope, { ...ctx, instance: inst });
       row = { key, inst, nodes: [...holder.childNodes], scope: liveScope, item, index };

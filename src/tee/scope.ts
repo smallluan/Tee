@@ -86,6 +86,84 @@ export function createRepeatScope(
   return makeScope(parent.$engine, locals, {}, parent, instance);
 }
 
+class FastRepeatScope implements Scope {
+  [key: string]: unknown;
+  readonly $engine: Engine;
+
+  constructor(
+    private readonly parent: Scope,
+    private readonly itemName: string,
+    private readonly indexName: string,
+    item: unknown,
+    index: number,
+    private readonly instance: Instance,
+  ) {
+    this.$engine = parent.$engine;
+    this[itemName] = item;
+    this[indexName] = index;
+  }
+
+  $lookup(name: string): unknown {
+    if (name === this.itemName || name === this.indexName) return this[name];
+    return this.parent.$lookup(name);
+  }
+
+  $assign(path: string, value: unknown): void {
+    const parts = path.split(".");
+    const first = parts[0];
+    if (first !== this.itemName && first !== this.indexName) {
+      this.parent.$assign(path, value);
+      return;
+    }
+    if (parts.length === 1) {
+      this[first] = value;
+      return;
+    }
+    let target = this[first];
+    for (let i = 1; i < parts.length - 1; i++) {
+      target = (target as Record<string, unknown> | null)?.[parts[i]];
+    }
+    if (target && typeof target === "object") {
+      (target as Record<string, unknown>)[parts[parts.length - 1]] = value;
+    }
+  }
+
+  $names(): string[] {
+    return [this.itemName, this.indexName, ...this.parent.$names()];
+  }
+
+  $values(names: string[]): unknown[] {
+    return names.map((name) => this.$lookup(name));
+  }
+
+  $child(locals: Record<string, unknown>): Scope {
+    return makeScope(this.$engine, observe(locals, this.$engine) as Record<string, unknown>, {}, this, this.instance);
+  }
+
+  get $refs(): Record<string, Element> {
+    return this.parent.$refs;
+  }
+
+  get $emit(): (name: string, payload?: unknown) => void {
+    return this.parent.$emit;
+  }
+
+  get $nextTick(): (fn?: () => void) => Promise<void> {
+    return this.parent.$nextTick;
+  }
+}
+
+export function createFastRepeatScope(
+  parent: Scope,
+  itemName: string,
+  indexName: string,
+  item: unknown,
+  index: number,
+  instance: Instance,
+): Scope {
+  return new FastRepeatScope(parent, itemName, indexName, item, index, instance);
+}
+
 export function defineComputed(
   instance: Instance,
   name: string,
