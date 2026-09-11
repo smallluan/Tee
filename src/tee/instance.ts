@@ -33,13 +33,11 @@ export class Instance {
     return this.childSet ?? EMPTY_CHILDREN;
   }
 
-  child(lean = false, attach = true): Instance {
+  child(lean = false): Instance {
     const inst = new Instance(this.engine, null, lean);
-    if (attach) {
-      inst.parent = this;
-      if (!this.childSet) this.childSet = new Set();
-      this.childSet.add(inst);
-    }
+    inst.parent = this;
+    if (!this.childSet) this.childSet = new Set();
+    this.childSet.add(inst);
     return inst;
   }
 
