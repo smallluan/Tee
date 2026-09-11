@@ -266,8 +266,14 @@ function bindEvent(el: Element, spec: string, src: string, scope: Scope, mods: s
 type DelegatedBinding = { scope: Scope; src: string; mods: string[] };
 const DELEGATED_KEYS = new Map<string, symbol>();
 const DELEGATED_DOCUMENTS = new WeakMap<Document, Set<string>>();
+const DELEGATED_ROW_ROOT = Symbol("tee:row-root");
+const DELEGATED_ROW_SCOPE = Symbol("tee:row-scope");
 
-function runDelegatedBinding(el: Element, event: Event, binding: DelegatedBinding): void {
+function runDelegatedBinding(
+  el: Element,
+  event: Event,
+  binding: DelegatedBinding | FastRowEvent,
+): void {
   const { mods } = binding;
   if (mods.includes("self") && event.target !== el) return;
   const keyName = mods.map((mod) => KEY_MODS[mod]).find(Boolean);
@@ -275,7 +281,15 @@ function runDelegatedBinding(el: Element, event: Event, binding: DelegatedBindin
   if (mods.includes("prevent")) event.preventDefault();
   if (mods.includes("stop")) event.stopPropagation();
   try {
-    runStatement(binding.scope, binding.src, event);
+    const scope =
+      "scope" in binding
+        ? binding.scope
+        : (
+            (el as Element & { [DELEGATED_ROW_ROOT]?: Element })[DELEGATED_ROW_ROOT] as
+              | (Element & { [DELEGATED_ROW_SCOPE]?: Scope })
+              | undefined
+          )?.[DELEGATED_ROW_SCOPE];
+    if (scope) runStatement(scope, binding.src, event);
   } catch (error) {
     console.error(error);
   }
@@ -303,7 +317,9 @@ function dispatchDelegated(event: Event, key: symbol): void {
   }
   for (const target of nodes) {
     if (!(target instanceof Element)) continue;
-    const binding = (target as Element & { [key: symbol]: DelegatedBinding | undefined })[key];
+    const binding = (
+      target as Element & { [key: symbol]: DelegatedBinding | FastRowEvent | undefined }
+    )[key];
     if (!binding || target.hasAttribute("disabled")) continue;
     current = target;
     runDelegatedBinding(target, event, binding);
@@ -312,7 +328,8 @@ function dispatchDelegated(event: Event, key: symbol): void {
   current = null;
 }
 
-function bindFastEvent(el: Element, eventName: string, src: string, scope: Scope, mods: string[]): void {
+function bindFastEvent(el: Element, binding: FastRowEvent, root: Element, scope: Scope): void {
+  const { event: eventName, src, mods } = binding;
   if (mods.includes("capture") || mods.includes("once")) {
     bindEvent(el, eventName, src, scope, mods);
     return;
@@ -322,7 +339,8 @@ function bindFastEvent(el: Element, eventName: string, src: string, scope: Scope
     key = Symbol(`tee:${eventName}`);
     DELEGATED_KEYS.set(eventName, key);
   }
-  (el as Element & { [key: symbol]: DelegatedBinding })[key] = { scope, src, mods };
+  (el as Element & { [key: symbol]: FastRowEvent })[key] = binding;
+  (el as Element & { [DELEGATED_ROW_ROOT]: Element })[DELEGATED_ROW_ROOT] = root;
   const doc = el.ownerDocument;
   let installed = DELEGATED_DOCUMENTS.get(doc);
   if (!installed) {
@@ -805,8 +823,11 @@ function fastRowRenderer(
     }
     const root = cached.root.cloneNode(true) as Element;
     const reactiveBindings = cached.reactiveBindings;
+    if (cached.events.length) {
+      (root as Element & { [DELEGATED_ROW_SCOPE]: Scope })[DELEGATED_ROW_SCOPE] = scope;
+    }
     for (const event of cached.events) {
-      bindFastEvent(nodeAtPath(root, event.path) as Element, event.event, event.src, scope, event.mods);
+      bindFastEvent(nodeAtPath(root, event.path) as Element, event, root, scope);
     }
     for (const ref of cached.refs) bindRef(nodeAtPath(root, ref.path) as Element, ref.name, scope);
     for (const binding of cached.bindings) {
