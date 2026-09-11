@@ -62,11 +62,17 @@ import zipfile, os, sys
 root = sys.argv[1]
 out = sys.argv[2]
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-    for dirpath, _, files in os.walk(root):
+    for dirpath, dirs, files in os.walk(root):
+        dirs.sort()
+        files.sort()
         for name in files:
             full = os.path.join(dirpath, name)
             rel = os.path.relpath(full, root)
-            z.write(full, rel.replace(os.sep, "/"))
+            info = zipfile.ZipInfo(rel.replace(os.sep, "/"), (1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = (0o100644 & 0xFFFF) << 16
+            with open(full, "rb") as source:
+                z.writestr(info, source.read())
 `,
     staging,
     out,
