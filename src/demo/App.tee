@@ -18,7 +18,7 @@
 
   <main class="wrap">
     <section class="hero" id="top">
-      <p class="eyebrow">Reactive · No virtual DOM · v{{ teeVersion }}</p>
+      <p class="eyebrow">Reactive · No virtual DOM · v{{ teeVersion }} <less-chip label="Less"></less-chip></p>
       <h1>点对点更新。</h1>
       <div class="hero-grid">
         <div>
@@ -51,7 +51,7 @@
         <a href="#interp"><small>01</small><h3>插值</h3><p>文本与属性里的双花括号，拆成独立活节点。</p></a>
         <a href="#computed"><small>02</small><h3>计算属性</h3><p>派生值懒计算，依赖变了只通知下游站点。</p></a>
         <a href="#watch"><small>03</small><h3>观察者</h3><p>路径变化时拿到 next / prev，写副作用。</p></a>
-        <a href="#show"><small>04</small><h3>条件显示</h3><p>t-show 用锚点插入或卸下真实节点。</p></a>
+        <a href="#show"><small>04</small><h3>条件</h3><p>t-if 互斥分支；t-show 插入或卸下真实节点。</p></a>
         <a href="#repeat"><small>05</small><h3>嵌套遍历</h3><p>部门套人员，t-key 复用已有 DOM。</p></a>
         <a href="#slots"><small>06</small><h3>自定义插槽</h3><p>具名 / 默认插槽在父作用域编译。</p></a>
         <a href="#bind"><small>07</small><h3>事件与表单</h3><p>t-on、t-bind、t-model、布尔属性。</p></a>
@@ -131,9 +131,9 @@
 
     <section class="feature reverse" id="show">
       <div class="copy">
-        <div class="idx">04 / T-SHOW</div>
+        <div class="idx">04 / T-IF · T-SHOW</div>
         <h3>条件显示</h3>
-        <p>t-show 不是 CSS 隐藏。假时节点从树上拿掉并注销映射；真时再编译进去。下面三块状态互斥，同一时刻只有一块真实 DOM。</p>
+        <p>t-if / t-else-if / t-else 同一时刻只挂载一条分支。t-show 仍然可用：假时从树上拿掉并注销映射。下面三块状态互斥，FAQ 手风琴用 t-show。</p>
       </div>
       <div class="stage">
         <div class="stage-bar"><span class="dots"><i></i><i></i><i></i></span><span>live / t-show</span></div>
@@ -143,9 +143,9 @@
             <button class="btn ghost" t-on:click="mode = 'ready'">就绪</button>
             <button class="btn ghost" t-on:click="mode = 'error'">错误</button>
           </div>
-          <div t-show="mode === 'idle'" class="empty">空态：还没有开始。这段 DOM 在 mode 不是 idle 时会被销毁。</div>
-          <div t-show="mode === 'ready'" class="notice">就绪：{{ guest || "访客" }} 可以继续往下看嵌套遍历。</div>
-          <div t-show="mode === 'error'" class="empty">错误态：这是第三份互斥模板，不是 display:none。</div>
+          <div t-if="mode === 'idle'" class="empty">空态：还没有开始。这段 DOM 在 mode 不是 idle 时会被销毁。</div>
+          <div t-else-if="mode === 'ready'" class="notice">就绪：{{ guest || "访客" }} 可以继续往下看嵌套遍历。</div>
+          <div t-else class="empty">错误态：这是 t-else 分支，不是 display:none。</div>
           <div class="stack">
             <article class="faq" t-repeat="item in faqs" t-key="item.id">
               <button t-on:click="openFaq = openFaq === item.id ? 0 : item.id">{{ item.q }}</button>
@@ -285,14 +285,21 @@
           <tr><td><code>Tee.create(options)</code></td><td>挂载应用。options：el、template、data、computed、watch、methods、tags。</td></tr>
           <tr><td><code>Tee.define(name, def)</code></td><td>注册自定义标签。def 可含 template、data、computed、methods、watch。</td></tr>
           <tr><td><code>{{ syntaxExpr }}</code></td><td>插值。每个表达式一个活文本节点。</td></tr>
+          <tr><td><code>t-if</code> / <code>t-else-if</code> / <code>t-else</code></td><td>互斥分支，同一时刻只存在一块真实 DOM。</td></tr>
           <tr><td><code>t-show</code></td><td>条件：插入或销毁真实 DOM。</td></tr>
           <tr><td><code>t-repeat</code> / <code>t-key</code></td><td>遍历，可嵌套。key 用来复用节点。</td></tr>
-          <tr><td><code>t-on:event</code></td><td>事件。方法名或语句。</td></tr>
-          <tr><td><code>t-bind:attr</code></td><td>属性绑定。布尔属性在假值时移除。</td></tr>
-          <tr><td><code>t-model</code></td><td>输入回写到路径。</td></tr>
+          <tr><td><code>t-on:event</code></td><td>事件。修饰符：.prevent .stop .once .self .capture，以及 enter/esc 等按键。</td></tr>
+          <tr><td><code>t-bind:attr</code></td><td>属性绑定。class 支持数组/对象，style 支持驼峰对象。t-bind 可展开对象。</td></tr>
+          <tr><td><code>t-model</code></td><td>输入回写。修饰符：.lazy .number .trim。</td></tr>
+          <tr><td><code>t-html</code> / <code>t-text</code> / <code>t-ref</code></td><td>innerHTML、文本、引用到 $refs。</td></tr>
+          <tr><td><code>props</code> / <code>$emit</code></td><td>子组件入参与向父组件发事件。</td></tr>
+          <tr><td><code>provide</code> / <code>inject</code></td><td>跨层级下发数据。</td></tr>
+          <tr><td><code>created</code> / <code>mounted</code> / <code>updated</code> / <code>unmounted</code></td><td>生命周期。Tee.nextTick 等冲洗结束。</td></tr>
+          <tr><td><code>Tee.use</code></td><td>插件。install(app)。</td></tr>
           <tr><td><code>t-slot</code> / <code>&lt;slot&gt;</code></td><td>具名与默认插槽。</td></tr>
           <tr><td><code>app.maps()</code></td><td>导出当前正向 / 反向表快照。</td></tr>
-          <tr><td><code>*.tee</code></td><td>单文件组件。Vite 插件在构建期拆 template / script / style，把模板编成 AST 工厂。</td></tr>
+          <tr><td><code>npx create-tee my-app</code></td><td>一键脚手架，和 Vite 一样生成可跑的工程。</td></tr>
+          <tr><td><code>*.tee</code></td><td>单文件组件。Vite 插件在构建期把模板编成 DOM 工厂；style 支持 css / less / scss 与 scoped。</td></tr>
           <tr><td><code>app.stats()</code></td><td>上一拍 Strata 计数：调度、跳过、实补。</td></tr>
         </tbody>
       </table>
@@ -387,7 +394,7 @@ export default {
       interp: `<h4>{{ title }}</h4>\\n<p>{{ guest }} · {{ bio }}</p>`,
       computed: `computed: {\\n  invoiceTotal() {\\n    return this.price * this.qty * 1.06\\n  }\\n}`,
       watch: `watch: {\\n  invoiceTotal(next, prev) {\\n    logs.unshift(prev + " → " + next)\\n  }\\n}`,
-      show: `<div t-show="mode === 'ready'">就绪</div>\\n<div t-show="mode === 'error'">错误</div>`,
+      show: `<div t-if="mode === 'ready'">就绪</div>\\n<div t-else-if="mode === 'error'">错误</div>\\n<div t-else>空态</div>`,
       repeat: `<section t-repeat="dept in depts" t-key="dept.id">\\n  <div t-repeat="person in dept.people" t-key="person.id">\\n    {{ person.name }}\\n  </div>\\n</section>`,
       slots: `<app-window>\\n  <template t-slot="title">{{ guest }} 的工作台</template>\\n  默认插槽\\n</app-window>`,
       bind: `<input t-model="form.email" />\\n<button t-bind:disabled="!canSend" t-on:click="send()">提交</button>`,

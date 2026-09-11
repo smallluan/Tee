@@ -1,4 +1,4 @@
-export { Tee, TeeApp, create, define, version } from "./tee";
+export { Tee, TeeApp, create, define, use, nextTick, version } from "./tee";
 export type { TeeOptions, TagDef, MapSnapshot, SiteSnapshot, WatchSource } from "./types";
 export { TwinMap } from "./maps";
 export { Engine } from "./engine";
@@ -6,5 +6,7 @@ export { Rank, STRATA, rankOf } from "./strata";
 export type { FlushStats } from "./strata";
 export { compileExpr, compileStmt, evalIR } from "./ir";
 export { parseHTML } from "./html";
-export { mountAST, mountTemplate } from "./compile";
-export { parseSFC, compileSFC } from "./sfc";
+export { mountAST, mountTemplate, rt } from "./compile";
+export type { CompileContext } from "./compile";
+export { parseSFC, compileSFC, scopeCss, hashScopeId } from "./sfc";
+export { generateRenderBody } from "./codegen";

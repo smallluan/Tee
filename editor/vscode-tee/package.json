@@ -1,0 +1,37 @@
+{
+  "name": "tee-language",
+  "displayName": "Tee",
+  "description": "Syntax highlighting and completions for Tee `.tee` single-file components.",
+  "version": "0.6.0",
+  "publisher": "tee",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "tee",
+        "aliases": ["Tee", "tee"],
+        "extensions": [".tee"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tee",
+        "scopeName": "source.tee",
+        "path": "./syntaxes/tee.tmLanguage.json",
+        "embeddedLanguages": {
+          "source.ts": "typescript",
+          "source.js": "javascript",
+          "source.css": "css",
+          "source.less": "less",
+          "source.css.scss": "scss",
+          "text.html.tee": "html"
+        }
+      }
+    ],
+    "html.customData": ["./tee.html-data.json"]
+  }
+}

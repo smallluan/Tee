@@ -1,6 +1,6 @@
 import { display, isBooleanAttr, parseRepeat, splitInterpolation, writeText } from "./expr";
 import type { Engine } from "./engine";
-import { attrValue, parseHTML, staticAttrs, type ElNode, type TmplNode } from "./html";
+import { attrValue, isVoidTag, parseHTML, staticAttrs, type ElNode, type TmplNode } from "./html";
 import { compileExpr } from "./ir";
 import { Instance } from "./instance";
 import { touchList } from "./observe";
@@ -15,6 +15,8 @@ export interface CompileContext {
   fillers?: Record<string, Node[]>;
   parentScope?: Scope;
   scope?: Scope;
+  scopeId?: string;
+  once?: boolean;
 }
 
 export function mountTemplate(html: string, parent: Node, scope: Scope, ctx: CompileContext): void {
@@ -22,7 +24,36 @@ export function mountTemplate(html: string, parent: Node, scope: Scope, ctx: Com
 }
 
 export function mountAST(nodes: TmplNode[], parent: Node, scope: Scope, ctx: CompileContext): void {
-  for (const node of nodes) mountNode(node, parent, scope, ctx);
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (node.t === "el" && attrValue(node.attrs, "if") != null) {
+      const chain: ElNode[] = [node];
+      while (i + 1 < nodes.length) {
+        const next = nodes[i + 1];
+        if (next.t === "text" && !next.value.trim()) {
+          i += 1;
+          continue;
+        }
+        if (next.t !== "el") break;
+        if (attrValue(next.attrs, "elif") != null) {
+          chain.push(next);
+          i += 1;
+          continue;
+        }
+        if (attrValue(next.attrs, "else") != null) {
+          chain.push(next);
+          i += 1;
+        }
+        break;
+      }
+      mountIfChain(chain, parent, scope, ctx);
+      continue;
+    }
+    if (node.t === "el" && (attrValue(node.attrs, "elif") != null || attrValue(node.attrs, "else") != null)) {
+      continue;
+    }
+    mountNode(node, parent, scope, ctx);
+  }
 }
 
 export function parseTemplate(html: string): DocumentFragment {
@@ -115,8 +146,9 @@ function bindAttrs(el: Element, scope: Scope, ctx: CompileContext): void {
       el.removeAttribute(name);
       continue;
     }
-    if (name === "t-model") {
-      bindModel(el, attr.value, scope, ctx);
+    if (name === "t-model" || name.startsWith("t-model.")) {
+      const mods = name.slice("t-model".length).split(".").filter(Boolean);
+      bindModel(el, attr.value, scope, ctx, mods);
       el.removeAttribute(name);
       continue;
     }
@@ -131,26 +163,17 @@ function interpolateToExpr(value: string): string {
     .join(" + ");
 }
 
-function bindAttr(el: Element, name: string, src: string, scope: Scope, ctx: CompileContext): void {
-  addSite(ctx, {
-    kind: "attr",
-    node: el,
-    label: `[${name}] ${src}`,
-    rank: rankOf("attr", compileExpr(src).stable),
-    run() {
-      applyReactive(this, ctx, scope, src, (value) => applyAttr(el, name, value));
-    },
-  });
-}
-
 function applyAttr(el: Element, name: string, value: unknown): void {
-  if (name === "class" && value && typeof value === "object" && !Array.isArray(value)) {
-    const next = Object.entries(value as Record<string, unknown>)
-      .filter(([, on]) => on)
-      .map(([cls]) => cls)
-      .join(" ");
+  if (name === "class") {
+    const next = classToString(value);
     if (next) el.setAttribute("class", next);
     else el.removeAttribute("class");
+    return;
+  }
+  if (name === "style") {
+    const next = styleToString(value);
+    if (next) el.setAttribute("style", next);
+    else el.removeAttribute("style");
     return;
   }
   if (isBooleanAttr(name)) {
@@ -165,24 +188,82 @@ function applyAttr(el: Element, name: string, value: unknown): void {
   el.setAttribute(name, display(value));
 }
 
-function bindEvent(el: Element, eventName: string, src: string, scope: Scope): void {
-  el.addEventListener(eventName, (event) => {
+function classToString(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map(classToString).filter(Boolean).join(" ");
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([, on]) => on)
+      .map(([cls]) => cls)
+      .join(" ");
+  }
+  return String(value);
+}
+
+function cssKey(name: string): string {
+  if (name.startsWith("--")) return name;
+  return name.replace(/[A-Z]/g, (ch) => "-" + ch.toLowerCase());
+}
+
+function styleToString(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v != null && v !== false && v !== "")
+      .map(([k, v]) => `${cssKey(k)}:${v}`)
+      .join(";");
+  }
+  return String(value);
+}
+
+const KEY_MODS: Record<string, string> = {
+  enter: "Enter",
+  tab: "Tab",
+  delete: "Delete",
+  esc: "Escape",
+  space: " ",
+  up: "ArrowUp",
+  down: "ArrowDown",
+  left: "ArrowLeft",
+  right: "ArrowRight",
+};
+
+function bindEvent(el: Element, spec: string, src: string, scope: Scope, mods: string[] = []): void {
+  let eventName = spec;
+  if (spec.includes(".")) {
+    const parts = spec.split(".");
+    eventName = parts[0];
+    mods = parts.slice(1);
+  }
+  const capture = mods.includes("capture");
+  const once = mods.includes("once");
+  const handler = (event: Event) => {
+    if (mods.includes("self") && event.target !== el) return;
+    const keyName = mods.map((m) => KEY_MODS[m]).find(Boolean);
+    if (keyName && (event as KeyboardEvent).key !== keyName) return;
+    if (mods.includes("prevent")) event.preventDefault();
+    if (mods.includes("stop")) event.stopPropagation();
     try {
       runStatement(scope, src, event);
     } catch (error) {
       console.error(error);
     }
-  });
+  };
+  el.addEventListener(eventName, handler, { capture, once });
 }
 
-function bindModel(el: Element, path: string, scope: Scope, ctx: CompileContext): void {
+function bindModel(el: Element, path: string, scope: Scope, ctx: CompileContext, mods: string[] = []): void {
   const isCheck = el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio");
-  const eventName = isCheck || el instanceof HTMLSelectElement ? "change" : "input";
+  const eventName = mods.includes("lazy") || isCheck || el instanceof HTMLSelectElement ? "change" : "input";
   el.addEventListener(eventName, () => {
     if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) {
       return;
     }
-    const value = isCheck && el instanceof HTMLInputElement ? el.checked : el.value;
+    let value: unknown = isCheck && el instanceof HTMLInputElement ? el.checked : el.value;
+    if (typeof value === "string" && mods.includes("trim")) value = value.trim();
+    if (typeof value === "string" && mods.includes("number")) value = value === "" ? "" : Number(value);
     scope.$assign(path, value);
   });
   addSite(ctx, {
@@ -429,6 +510,10 @@ function addSite(
   site.run = init.run.bind(site);
   ctx.instance.sites.push(site);
   site.run();
+  if (ctx.once) {
+    site.dead = true;
+    ctx.engine.maps.unlink(site);
+  }
   return site;
 }
 
@@ -518,6 +603,20 @@ function keyFor(
   }
 }
 
+function rtLive(parent: Node, scope: Scope, ctx: CompileContext, src: string): void {
+  const text = document.createTextNode("");
+  parent.appendChild(text);
+  addSite(ctx, {
+    kind: "text",
+    node: text,
+    label: `{{ ${src} }}`,
+    rank: rankOf("text", compileExpr(src).stable),
+    run() {
+      applyReactive(this, ctx, scope, src, (value) => writeText(text, value));
+    },
+  });
+}
+
 function mountNode(node: TmplNode, parent: Node, scope: Scope, ctx: CompileContext): void {
   if (ctx.instance.detached) return;
   if (node.t === "text") {
@@ -525,17 +624,12 @@ function mountNode(node: TmplNode, parent: Node, scope: Scope, ctx: CompileConte
     return;
   }
   if (node.t === "live") {
-    const text = document.createTextNode("");
-    parent.appendChild(text);
-    addSite(ctx, {
-      kind: "text",
-      node: text,
-      label: `{{ ${node.src} }}`,
-      rank: rankOf("text", compileExpr(node.src).stable),
-      run() {
-        applyReactive(this, ctx, scope, node.src, (value) => writeText(text, value));
-      },
-    });
+    rtLive(parent, scope, ctx, node.src);
+    return;
+  }
+  if (attrValue(node.attrs, "once") != null) {
+    const stripped: ElNode = { ...node, attrs: node.attrs.filter((attr) => attr.kind !== "once") };
+    mountNode(stripped, parent, scope, { ...ctx, once: true });
     return;
   }
   if (attrValue(node.attrs, "repeat") != null) {
@@ -544,6 +638,12 @@ function mountNode(node: TmplNode, parent: Node, scope: Scope, ctx: CompileConte
   }
   if (attrValue(node.attrs, "show") != null) {
     mountShowNode(node, parent, scope, ctx);
+    return;
+  }
+  if (attrValue(node.attrs, "pre") != null) {
+    const holder = document.createElement("template");
+    holder.innerHTML = serializeNode(node);
+    parent.append(...holder.content.childNodes);
     return;
   }
   if (node.tag === "slot") {
@@ -559,14 +659,124 @@ function mountNode(node: TmplNode, parent: Node, scope: Scope, ctx: CompileConte
 
 function mountElement(node: ElNode, parent: Node, scope: Scope, ctx: CompileContext): void {
   const el = document.createElement(node.tag);
+  if (ctx.scopeId) el.setAttribute(ctx.scopeId, "");
   for (const attr of staticAttrs(node.attrs)) el.setAttribute(attr.name, attr.value);
   for (const attr of node.attrs) {
-    if (attr.kind === "on") bindEvent(el, attr.event, attr.value, scope);
+    if (attr.kind === "on") bindEvent(el, attr.event, attr.value, scope, attr.mods);
     else if (attr.kind === "bind") bindAttr(el, attr.name, attr.value, scope, ctx);
-    else if (attr.kind === "model") bindModel(el, attr.value, scope, ctx);
+    else if (attr.kind === "model") bindModel(el, attr.value, scope, ctx, attr.mods);
+    else if (attr.kind === "html") bindHtml(el, attr.value, scope, ctx);
+    else if (attr.kind === "text") bindAttr(el, "textContent", attr.value, scope, ctx);
+    else if (attr.kind === "ref") bindRef(el, attr.value, scope);
   }
-  mountAST(node.children, el, scope, ctx);
+  if (node.children.length && node.children.every((child) => isStaticNode(child, ctx))) {
+    el.innerHTML = node.children.map(serializeNode).join("");
+  } else {
+    mountAST(node.children, el, scope, ctx);
+  }
+  el.removeAttribute("t-cloak");
   parent.appendChild(el);
+}
+
+function bindHtml(el: Element, src: string, scope: Scope, ctx: CompileContext): void {
+  addSite(ctx, {
+    kind: "attr",
+    node: el,
+    label: `[html] ${src}`,
+    rank: rankOf("attr", compileExpr(src).stable),
+    run() {
+      applyReactive(this, ctx, scope, src, (value) => {
+        el.innerHTML = value == null ? "" : String(value);
+      });
+    },
+  });
+}
+
+function bindRef(el: Element, name: string, scope: Scope): void {
+  const refs = (scope.$lookup("$refs") as Record<string, Element> | undefined) ?? undefined;
+  if (refs) refs[name] = el;
+}
+
+function bindSpread(el: Element, src: string, scope: Scope, ctx: CompileContext): void {
+  addSite(ctx, {
+    kind: "attr",
+    node: el,
+    label: `[bind] ${src}`,
+    rank: rankOf("attr", compileExpr(src).stable),
+    run() {
+      applyReactive(this, ctx, scope, src, (value) => {
+        if (!value || typeof value !== "object") return;
+        for (const [key, next] of Object.entries(value as Record<string, unknown>)) {
+          applyAttr(el, key, next);
+        }
+      });
+    },
+  });
+}
+
+function bindAttr(el: Element, name: string, src: string, scope: Scope, ctx: CompileContext): void {
+  if (!name) {
+    bindSpread(el, src, scope, ctx);
+    return;
+  }
+  if (name === "class") {
+    const base = el.getAttribute("class") || "";
+    addSite(ctx, {
+      kind: "attr",
+      node: el,
+      label: `[class] ${src}`,
+      rank: rankOf("attr", compileExpr(src).stable),
+      run() {
+        applyReactive(this, ctx, scope, src, (value) => {
+          const next = [base, classToString(value)].filter(Boolean).join(" ");
+          if (next) el.setAttribute("class", next);
+          else el.removeAttribute("class");
+        });
+      },
+    });
+    return;
+  }
+  if (name === "style") {
+    const base = el.getAttribute("style") || "";
+    addSite(ctx, {
+      kind: "attr",
+      node: el,
+      label: `[style] ${src}`,
+      rank: rankOf("attr", compileExpr(src).stable),
+      run() {
+        applyReactive(this, ctx, scope, src, (value) => {
+          const next = [base, styleToString(value)].filter(Boolean).join(";");
+          if (next) el.setAttribute("style", next);
+          else el.removeAttribute("style");
+        });
+      },
+    });
+    return;
+  }
+  if (name === "textContent") {
+    addSite(ctx, {
+      kind: "text",
+      node: el,
+      label: `[text] ${src}`,
+      rank: rankOf("text", compileExpr(src).stable),
+      run() {
+        applyReactive(this, ctx, scope, src, (value) => {
+          const s = display(value);
+          if (el.textContent !== s) el.textContent = s;
+        });
+      },
+    });
+    return;
+  }
+  addSite(ctx, {
+    kind: "attr",
+    node: el,
+    label: `[${name}] ${src}`,
+    rank: rankOf("attr", compileExpr(src).stable),
+    run() {
+      applyReactive(this, ctx, scope, src, (value) => applyAttr(el, name, value));
+    },
+  });
 }
 
 function mountShowNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileContext): void {
@@ -591,7 +801,7 @@ function mountShowNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileCon
         if (on && !visible) {
           const inst = ctx.instance.child();
           const holder = document.createDocumentFragment();
-          mountElement(stripped, holder, scope, { ...ctx, instance: inst });
+          mountNode(stripped, holder, scope, { ...ctx, instance: inst });
           const nodes = [...holder.childNodes];
           for (const live of nodes) anchor.parentNode?.insertBefore(live, anchor);
           current = { inst, nodes };
@@ -694,11 +904,50 @@ function mountTagNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileCont
   if (!def) return;
   const fillers = collectFillersAst(node.children, scope, ctx);
   const inst = ctx.instance.child();
-  let innerScope = scope;
-  if (def.data || def.computed || def.methods || def.watch) {
-    innerScope = createRootScope(ctx.engine, def.data ? def.data() : {}, def.computed, def.methods, def.watch, inst);
-    inst.scope = innerScope;
-    def.setup?.(innerScope);
+  const propNames = listPropNames(def.props);
+  const data = { ...(def.data ? def.data() : {}) };
+  for (const name of propNames) {
+    const bound = node.attrs.find((attr) => attr.kind === "bind" && attr.name === name);
+    const stat = staticAttrs(node.attrs).find((attr) => attr.name === name);
+    if (bound) data[name] = runExpr(scope, bound.value);
+    else if (stat) data[name] = stat.value;
+    else if (def.props && !Array.isArray(def.props) && def.props[name] && "default" in def.props[name]) {
+      data[name] = def.props[name].default;
+    }
+  }
+  for (const attr of node.attrs) {
+    if (attr.kind === "on") {
+      inst.listeners[attr.event] = (payload: unknown) => {
+        const trimmed = attr.value.trim();
+        const fn = scope.$lookup(trimmed);
+        if (typeof fn === "function" && /^[A-Za-z_$][\w$]*$/.test(trimmed)) {
+          fn(payload);
+          return;
+        }
+        runStatement(scope, attr.value, payload as Event);
+      };
+    }
+  }
+  applyInject(inst, def.inject, data);
+  const innerScope = createRootScope(ctx.engine, data, def.computed, def.methods, def.watch, inst);
+  inst.scope = innerScope;
+  applyProvide(inst, def.provide, innerScope);
+  def.created?.call(innerScope);
+  def.setup?.(innerScope);
+  for (const name of propNames) {
+    const bound = node.attrs.find((attr) => attr.kind === "bind" && attr.name === name);
+    if (!bound) continue;
+    addSite(ctx, {
+      kind: "attr",
+      node: null,
+      label: `prop ${name}`,
+      rank: rankOf("attr", compileExpr(bound.value).stable),
+      run() {
+        applyReactive(this, ctx, scope, bound.value, (value) => {
+          innerScope.$assign(name, value);
+        });
+      },
+    });
   }
   const innerCtx: CompileContext = { ...ctx, instance: inst, fillers, parentScope: scope, scope: innerScope };
   const mount = document.createDocumentFragment();
@@ -707,12 +956,121 @@ function mountTagNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileCont
   const first = mount.firstElementChild;
   if (first) {
     for (const attr of staticAttrs(node.attrs)) {
+      if (propNames.includes(attr.name)) continue;
       if (attr.name === "class" && first.getAttribute("class")) {
         first.setAttribute("class", `${first.getAttribute("class")} ${attr.value}`);
       } else if (!first.hasAttribute(attr.name)) first.setAttribute(attr.name, attr.value);
     }
+    const ref = node.attrs.find((attr) => attr.kind === "ref");
+    if (ref) bindRef(first, ref.value, scope);
   }
   parent.append(...mount.childNodes);
+  def.mounted?.call(innerScope);
+  inst.hooks.updated = () => def.updated?.call(innerScope);
+  inst.hooks.unmounted = () => def.unmounted?.call(innerScope);
+}
+
+function listPropNames(props: TagDef["props"]): string[] {
+  if (!props) return [];
+  return Array.isArray(props) ? props : Object.keys(props);
+}
+
+export function applyInject(
+  inst: Instance,
+  inject: TagDef["inject"],
+  data: Record<string, unknown>,
+): void {
+  if (!inject) return;
+  if (Array.isArray(inject)) {
+    for (const key of inject) {
+      const found = inst.lookupProvide(key);
+      if (found !== undefined) data[key] = found;
+    }
+    return;
+  }
+  for (const [local, spec] of Object.entries(inject)) {
+    if (typeof spec === "string") {
+      const found = inst.lookupProvide(spec);
+      if (found !== undefined) data[local] = found;
+      continue;
+    }
+    const from = spec?.from ?? local;
+    const found = inst.lookupProvide(from);
+    if (found !== undefined) data[local] = found;
+    else if (spec && Object.prototype.hasOwnProperty.call(spec, "default")) data[local] = spec.default;
+  }
+}
+
+export function applyProvide(inst: Instance, provide: TagDef["provide"], scope: Scope): void {
+  if (!provide) return;
+  inst.provides = typeof provide === "function" ? provide.call(scope) : { ...provide };
+}
+
+function mountIfChain(chain: ElNode[], parent: Node, scope: Scope, ctx: CompileContext): void {
+  const anchor = document.createComment("t-if");
+  parent.appendChild(anchor);
+  let current: { inst: Instance; nodes: Node[]; index: number } | null = null;
+  const sources = chain.map((node) => {
+    if (attrValue(node.attrs, "if") != null) return attrValue(node.attrs, "if") ?? "";
+    if (attrValue(node.attrs, "elif") != null) return attrValue(node.attrs, "elif") ?? "";
+    return "true";
+  });
+  const trackSrc = `[${sources.map((src) => `(${src})`).join(",")}]`;
+  addSite(ctx, {
+    kind: "show",
+    node: anchor,
+    label: `t-if ${sources[0]}`,
+    rank: Rank.Structure,
+    run() {
+      applyReactive(this, ctx, scope, trackSrc, () => {
+        let index = -1;
+        for (let i = 0; i < chain.length; i++) {
+          const src = sources[i];
+          const on = src === "true" ? true : Boolean(runExpr(scope, src));
+          if (on) {
+            index = i;
+            break;
+          }
+        }
+        if (current && current.index === index) return;
+        if (current) {
+          current.inst.destroy();
+          for (const live of current.nodes) live.parentNode?.removeChild(live);
+          current = null;
+        }
+        if (index < 0) return;
+        const branch = chain[index];
+        const stripped: ElNode = {
+          ...branch,
+          attrs: branch.attrs.filter((attr) => attr.kind !== "if" && attr.kind !== "elif" && attr.kind !== "else"),
+        };
+        const inst = ctx.instance.child();
+        const holder = document.createDocumentFragment();
+        mountNode(stripped, holder, scope, { ...ctx, instance: inst });
+        const nodes = [...holder.childNodes];
+        for (const live of nodes) anchor.parentNode?.insertBefore(live, anchor);
+        current = { inst, nodes, index };
+      });
+    },
+  });
+}
+
+function isStaticNode(node: TmplNode, ctx: CompileContext): boolean {
+  if (node.t === "live") return false;
+  if (node.t === "text") return true;
+  if (node.tag === "slot" || ctx.lookup(node.tag)) return false;
+  for (const attr of node.attrs) if (attr.kind !== "static") return false;
+  return node.children.every((child) => isStaticNode(child, ctx));
+}
+
+function serializeNode(node: TmplNode): string {
+  if (node.t === "text") return node.value;
+  if (node.t === "live") return "";
+  const attrs = staticAttrs(node.attrs)
+    .map((attr) => ` ${attr.name}="${attr.value.replace(/"/g, "&quot;")}"`)
+    .join("");
+  if (isVoidTag(node.tag)) return `<${node.tag}${attrs}>`;
+  return `<${node.tag}${attrs}>${node.children.map(serializeNode).join("")}</${node.tag}>`;
 }
 
 function mountSlotNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileContext): void {
@@ -746,3 +1104,36 @@ function collectFillersAst(children: TmplNode[], scope: Scope, ctx: CompileConte
   }
   return fillers;
 }
+
+/** Runtime helpers used by AOT factories generated from `.tee` files. */
+export const rt = {
+  live: rtLive,
+  text(parent: Node, value: string) {
+    parent.appendChild(document.createTextNode(value));
+  },
+  el(tag: string, ctx: CompileContext) {
+    const el = document.createElement(tag);
+    if (ctx.scopeId) el.setAttribute(ctx.scopeId, "");
+    return el;
+  },
+  static(el: Element, name: string, value: string) {
+    el.setAttribute(name, value);
+  },
+  on: bindEvent,
+  bind: bindAttr,
+  model: bindModel,
+  html: bindHtml,
+  ref: bindRef,
+  cloak(el: Element) {
+    el.removeAttribute("t-cloak");
+  },
+  onceCtx(ctx: CompileContext): CompileContext {
+    return { ...ctx, once: true };
+  },
+  mount(parent: Node, scope: Scope, ctx: CompileContext, node: TmplNode) {
+    mountNode(node, parent, scope, ctx);
+  },
+  nodes(parent: Node, scope: Scope, ctx: CompileContext, nodes: TmplNode[]) {
+    mountAST(nodes, parent, scope, ctx);
+  },
+};

@@ -13,6 +13,9 @@ const UNSCOPABLES: Record<string, boolean> = {
   $child: true,
   $assign: true,
   $lookup: true,
+  $refs: true,
+  $emit: true,
+  $nextTick: true,
 };
 
 export interface Scope extends Record<string, unknown> {
@@ -22,6 +25,9 @@ export interface Scope extends Record<string, unknown> {
   $child(locals: Record<string, unknown>): Scope;
   $assign(path: string, value: unknown): void;
   $lookup(name: string): unknown;
+  $refs: Record<string, Element>;
+  $emit: (name: string, payload?: unknown) => void;
+  $nextTick: (fn?: () => void) => Promise<void>;
 }
 
 const COMPUTED = new WeakSet<() => unknown>();
@@ -52,6 +58,15 @@ export function createRootScope(
       extras[name] = reader;
     }
   }
+
+  extras.$refs = {};
+  extras.$emit = (name: string, payload?: unknown) => {
+    instance.listeners[name]?.(payload);
+  };
+  extras.$nextTick = (fn?: () => void) => {
+    const p = engine.afterFlush();
+    return fn ? p.then(fn) : p;
+  };
 
   scope = makeScope(engine, reactive, extras, null, instance);
   if (watch) bindWatchers(engine, scope, watch, instance);
@@ -130,10 +145,15 @@ function bindWatchers(
         } finally {
           engine.commitTrack(site, engine.stopTrack());
         }
-        if (primed && !Object.is(next, prev)) handler.call(scope, next, prev);
-        else if (primed) engine.stats.skipEqual += 1;
+        if (!primed) {
+          primed = true;
+          prev = next;
+          if (typeof source !== "function" && source.immediate) handler.call(scope, next, undefined);
+          return;
+        }
+        if (!Object.is(next, prev)) handler.call(scope, next, prev);
+        else engine.stats.skipEqual += 1;
         prev = next;
-        primed = true;
       },
     };
     instance.sites.push(site);

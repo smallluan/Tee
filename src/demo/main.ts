@@ -2,6 +2,7 @@ import "./style.css";
 import "./tags/mini-counter.tee";
 import "./tags/app-window.tee";
 import "./tags/tea-card.tee";
+import "./tags/less-chip.tee";
 import App from "./App.tee";
 import { Tee } from "tee";
 

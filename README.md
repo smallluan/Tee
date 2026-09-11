@@ -1,8 +1,8 @@
 # Tee
 
-Tee 是一个精简但工程化的响应式前端框架。它**不使用虚拟 DOM**，也不走 Vue / React 那套「先造一棵虚拟树再 diff」的路子。
+Tee 是一个面向生产的响应式前端框架。它**不使用虚拟 DOM**。数据一变，运行时只在双向映射表里查出需要修补的真实 DOM 节点，然后点对点更新。
 
-数据一变，Tee 只做一件事：在**双向映射表**里查出需要修补的真实 DOM 节点，然后点对点更新。
+这不是「已经跑赢所有框架」的声明。架构可以对齐 Solid / Vue 3 的更新模型（没有 VNode diff），公开基准只能靠同一套测量。Tee 的调度叫 **Tee Strata**：按等级跳过工作，`.tee` 在构建期编成 DOM 工厂。
 
 ```
 写入 data.price
@@ -17,162 +17,141 @@ Tee 是一个精简但工程化的响应式前端框架。它**不使用虚拟 D
 只 patch 这些 Node，不重建整棵树
 ```
 
-这套调度叫 **Tee Strata**：按架构分层跳过工作，而不是在错误的抽象上做微优化。它让更新路径可预测，但**没有**宣称已经跑赢 Vue / Solid / React 的公开基准；那种结论只能拿同一套测量来说。
+## 一键创建项目
 
-## 核心结构
-
-| 表 | 含义 |
-| --- | --- |
-| **正向映射** `property → Set<Site>` | 这个属性变了，哪些真实 DOM 站点必须更新 |
-| **反向映射** `Site → Set<property>` | 更新这个站点时要读哪些属性 |
-
-站点（Site）绑的是真实 `Text` / `Element` / 锚点注释，不是 VNode。列表用 `t-key` 对已有 DOM 实例做重排，仍然不是虚拟树 diff。
-
-## Tee Strata
-
-两层格子，编译期一次，运行时每拍一次。
-
-### 编译层（模板 → 内核）
-
-| 层 | 名称 | 做什么 |
-| --- | --- | --- |
-| C0 | Parse | 递归下降编成 IR，热路径不再 `with(proxy)` |
-| C1 | Classify | 稳定路径（ident / member）标成 Leaf，其余 Expr |
-| C2 | Codegen | IR 生成 `Function`；解译只作回退 |
-| C3 | Cache | 同一表达式只编一次 |
-
-### 运行时等级（写入 → patch）
-
-| 级 | 名称 | 做什么 |
-| --- | --- | --- |
-| S0 | Derived | computed；`Object.is` 未变则**不**通知下游 |
-| S1 | Leaf | 稳定路径；冻结反向表；靠属性时钟决定是否求值 |
-| S2 | Expr | 动态表达式；依赖集合没变就不 relink |
-| S3 | Watch | 观察者，等数据格落定 |
-| S4 | Structure | `t-show` / `t-repeat` 最后提交；key 未动则不挪 DOM |
-
-一次写入会 bump 该属性的 interned clock，然后只把 `forward[prop]` 里的站点推进对应等级桶。computed 是 push + pull：S0 每拍最多算一次，后面的等级用时钟读缓存。
-
-## 模板能力
-
-- 插值 `{{ expression }}`
-- 计算属性 `computed`
-- 观察者 `watch`
-- 条件显示 `t-show`
-- 嵌套遍历 `t-repeat` / `t-key`
-- 自定义标签 + 具名 / 默认插槽 `Tee.define` · `<slot>` · `t-slot`
-- 事件 `t-on:click`
-- 属性绑定 `t-bind:disabled`
-- 表单回写 `t-model`
-
-## 快速开始
+和 `npm create vite` 一样：
 
 ```bash
+npx create-tee my-app
+cd my-app
 npm install
 npm run dev
 ```
 
-浏览器打开 Vite 给出的地址（默认 `http://127.0.0.1:43151`）。首页是用 Tee 自己写的官网：能力地图覆盖插值、计算属性、观察者、条件显示、嵌套遍历、自定义插槽、事件/表单绑定，以及运行中的 Strata 计数和双向映射表。每个区块都是可交互的真应用，不是截图。
+在本仓库里也可以：
 
 ```bash
+node scripts/create-tee.mjs my-app
+```
+
+生成的工程带 Vite、`.tee` 单文件组件、Less scoped、以及编辑器补全配置。
+
+## 本仓库演示
+
+```bash
+npm install
+npm run dev
 npm test
 ```
 
-## 用法
+浏览器打开 Vite 给出的地址（默认 `http://127.0.0.1:43151`）。首页是用 Tee 自己写的官网。
 
-```ts
-import { Tee } from "tee";
+## Vue 基础能力对照
 
-Tee.define("tea-card", {
-  template: `
-    <article>
-      <header><slot name="badge"></slot></header>
-      <slot></slot>
-    </article>
-  `,
-});
+自定义标签需要带连字符（和 Web Components 一样），例如 `tea-card`。
 
-Tee.create({
-  el: "#app",
-  template: `
-    <h1>{{ title }}</h1>
-    <p>合计 ¥{{ total }}</p>
-    <p t-show="items.length === 0">空托盘</p>
-    <tea-card t-repeat="tea in items" t-key="tea.id">
-      <template t-slot="badge">¥{{ tea.price }}</template>
-      {{ tea.name }}
-    </tea-card>
-  `,
-  data: {
-    title: "青石茶寮",
-    items: [{ id: 1, name: "肉桂", price: 42 }],
-  },
-  computed: {
-    total() {
-      return this.items.reduce((sum, tea) => sum + tea.price, 0);
-    },
-  },
-  watch: {
-    total(next, prev) {
-      console.log("合计", prev, "→", next);
-    },
-  },
-});
-```
+| Vue | Tee |
+| --- | --- |
+| `{{ expr }}` | `{{ expr }}` |
+| `v-if` / `v-else-if` / `v-else` | `t-if` / `t-else-if` / `t-else` |
+| `v-show` | `t-show`（假值时从树上卸下，不是 `display:none`） |
+| `v-for` / `:key` | `t-repeat` 或 `t-for` / `t-key` |
+| `v-on:click` / `@click` / `.prevent` | `t-on:click` / `t-on:click.prevent` |
+| `v-bind:title` / `:class` / `:style` | `t-bind:title` / `t-bind:class` / `t-bind:style` |
+| `v-bind="obj"` | `t-bind="obj"` |
+| `v-model` / `.lazy` `.number` `.trim` | `t-model` / 同样的修饰符 |
+| `v-html` / `v-text` | `t-html` / `t-text` |
+| `ref` | `t-ref` → `$refs` |
+| `v-pre` / `v-once` / `v-cloak` | `t-pre` / `t-once` / `t-cloak` |
+| `props` / `emit` | `props` / `$emit` |
+| `provide` / `inject` | `provide` / `inject` |
+| `created` `mounted` `updated` `unmounted` | 同名 |
+| `nextTick` | `Tee.nextTick` / `$nextTick` |
+| `computed` / `watch` / `watch.immediate` | 同名 |
+| 插槽 | `<slot>` / `t-slot` |
+| 插件 | `Tee.use({ install })` |
+| `.vue` + `lang="less"` + `scoped` | `.tee` + `lang="less"` / `scss` + `scoped` |
 
-`app.maps()` 导出当前正向 / 反向表。`app.stats()` 导出上一拍 Strata 计数：`notify` / `mark` / `run` / `skipClock` / `skipEqual` / `relink` / `patch`。
+代码提示不完全是运行时的职责，但框架必须把编辑器材料交出去：HTML custom data、TextMate 语法、`*.tee` 类型。Vue 有 Volar；Tee 在 `editor/` 和 `create-tee` 的 `.vscode` 里提供同等入口。
 
 ## `.tee` 单文件组件
 
-Vue 的 `.vue` 不是浏览器认识的格式。Vite 的 `@vitejs/plugin-vue` 在构建期拦截这个文件，用编译器拆成三块：
-
-1. `<template>` → 编成 render 函数
-2. `<script>` → 普通 JS 模块，把 render 挂上去
-3. `<style>` → CSS 模块或注入的 `<style>` 标签
-
-浏览器最后只拿到 JS / CSS。解析规则完全由框架自己定。
-
-Tee 做同样的事，文件扩展名是 `.tee`，模板语法是自己的 `{{ }}` / `t-show` / `t-repeat`，不是 Vue 的 `v-`。`vite-plugin-tee` 在构建期把 `<template>` 编成 AST 工厂（不再运行时 `innerHTML`），`<script>` 导出选项对象，`tag` 字段会自动 `Tee.define`。
+构建期拆成三块，浏览器只拿到 JS / CSS：
 
 ```tee
 <template>
-  <p>{{ guest }}</p>
+  <p t-if="ok">{{ guest }}</p>
   <button t-on:click="count = count + 1">{{ count }}</button>
 </template>
 
 <script lang="ts">
 export default {
   tag: "hello-box",
-  data: () => ({ guest: "访客", count: 0 }),
+  data: () => ({ guest: "访客", count: 0, ok: true }),
 };
 </script>
+
+<style lang="less" scoped>
+@leaf: #215536;
+p { color: @leaf; }
+</style>
 ```
 
 ```ts
 import { tee } from "tee/plugin";
+import { Tee } from "tee";
 import App from "./App.tee";
-import "./tags/hello-box.tee";
 
 export default defineConfig({ plugins: [tee()] });
 Tee.create({ el: "#app", ...App });
 ```
 
-字符串模板 `Tee.create({ template: "..." })` 仍然可用，测试和嵌入场景不用过 Vite。
+原生 HTML 会编成 `createElement` 工厂；`t-if` / `t-repeat` / 自定义标签走运行时挂载。字符串模板 `Tee.create({ template })` 仍然可用，不必过 Vite。
+
+## 编辑器
+
+- 仓库 `.vscode/settings.json`：`*.tee` 关联 HTML，并加载 `editor/tee.html-data.json`（`t-*` 补全）
+- `editor/vscode-tee`：TextMate 语法（模板插值、`<script lang="ts">`、`<style lang="less">`）
+- `src/vite-env.d.ts`：`import x from "./App.tee"` 有类型
+
+在 Cursor / VS Code 用 **Install Extension from Location** 指向 `editor/vscode-tee` 即可启用高亮。
+
+## Tee Strata
+
+### 编译层
+
+| 层 | 名称 | 做什么 |
+| --- | --- | --- |
+| C0 | Parse | 递归下降编成 IR，热路径不再 `with(proxy)` |
+| C1 | Classify | 稳定路径标成 Leaf |
+| C2 | Codegen | IR 生成 `Function`；`.tee` 再生成 DOM 工厂 |
+| C3 | Cache | 同一表达式只编一次 |
+
+### 运行时等级
+
+| 级 | 名称 | 做什么 |
+| --- | --- | --- |
+| S0 | Derived | computed；`Object.is` 未变则不通知下游 |
+| S1 | Leaf | 稳定路径；靠属性时钟决定是否求值 |
+| S2 | Expr | 动态表达式；依赖集合没变就不 relink |
+| S3 | Watch | 观察者，等数据格落定 |
+| S4 | Structure | `t-if` / `t-show` / `t-repeat` 最后提交 |
 
 ## 源码地图
 
 ```
-src/tee/maps.ts      双向映射表（依赖集未变则不 relink）
-src/tee/strata.ts    等级、时钟格子、Strata 计数
-src/tee/ir.ts        表达式 IR + 代码生成
+src/tee/maps.ts      双向映射表
+src/tee/strata.ts    等级、时钟、计数
+src/tee/ir.ts        表达式 IR
 src/tee/html.ts      模板 HTML → AST
-src/tee/sfc.ts       .tee 拆块 + 编成模块
-src/tee/plugin.ts    Vite 插件
-src/tee/engine.ts    通知、按等级冲洗
-src/tee/observe.ts   对真实对象做路径通知（不是 VNode）
-src/tee/compile.ts   AST / 字符串模板 → 站点
-src/tee/scope.ts     计算属性、观察者、作用域链
-src/demo/            用 .tee 写的框架介绍站
+src/tee/codegen.ts   .tee → DOM 工厂
+src/tee/sfc.ts       单文件拆块
+src/tee/plugin.ts    Vite 插件（Less / scoped / HMR）
+src/tee/compile.ts   挂载与运行时 helpers
+src/tee/engine.ts    按等级冲洗
+scripts/create-tee.mjs
+templates/starter/
+editor/              语法、补全、VS Code 扩展
 ```
 
-公开入口：`Tee.create`、`Tee.define`、`Tee.version`。
+公开入口：`Tee.create`、`Tee.define`、`Tee.use`、`Tee.nextTick`、`Tee.version`。

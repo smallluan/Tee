@@ -1,0 +1,116 @@
+<template>
+  <main class="page">
+    <p class="eyebrow">Tee · no virtual DOM</p>
+    <h1>{{ title }}</h1>
+    <p class="lede">改输入只 patch 真实文本节点。Less 变量在右边的芯片上。</p>
+
+    <label>
+      名字
+      <input t-model.trim="guest" placeholder="访客" />
+    </label>
+
+    <p class="hello">你好，{{ guest || "访客" }}</p>
+
+    <div class="row">
+      <button t-on:click="count = count + 1">count {{ count }}</button>
+      <span class="chip">{{ doubled }}</span>
+    </div>
+
+    <p t-if="count === 0" class="empty">还没点过。</p>
+    <p t-else-if="count < 5" class="ok">继续点，{{ guest || "访客" }}。</p>
+    <p t-else class="ok">已经 {{ count }} 次了。</p>
+  </main>
+</template>
+
+<script lang="ts">
+export default {
+  data: () => ({
+    title: "新的 Tee 应用",
+    guest: "",
+    count: 0,
+  }),
+  computed: {
+    doubled() {
+      return Number(this.count) * 2;
+    },
+  },
+};
+</script>
+
+<style lang="less" scoped>
+@paper: #f3ece0;
+@ink: #1c1610;
+@leaf: #215536;
+@gold: #b8893a;
+
+.page {
+  max-width: 40rem;
+  margin: 12vh auto;
+  padding: 0 1.25rem;
+  color: @ink;
+  font-family: "IBM Plex Sans", "PingFang SC", sans-serif;
+}
+
+.eyebrow {
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  color: @leaf;
+}
+
+h1 {
+  font-size: 2.4rem;
+  margin: 0 0 0.5rem;
+}
+
+.lede,
+.empty,
+.ok,
+.hello {
+  color: lighten(@ink, 28%);
+}
+
+label {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1.5rem 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+input,
+button {
+  font: inherit;
+}
+
+input {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid fade(@ink, 16%);
+  border-radius: 0.55rem;
+  background: white;
+}
+
+.row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+
+button {
+  background: @ink;
+  color: @paper;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background: fade(@gold, 22%);
+  color: darken(@gold, 18%);
+  font-size: 0.85rem;
+}
+</style>

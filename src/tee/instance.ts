@@ -5,8 +5,12 @@ import type { Scope } from "./scope";
 export class Instance {
   readonly sites: Site[] = [];
   readonly children: Instance[] = [];
+  readonly listeners: Record<string, (payload: unknown) => void> = {};
+  provides: Record<string, unknown> = {};
+  parent: Instance | null = null;
   scope: Scope | null = null;
   detached = false;
+  hooks: { updated?: () => void; unmounted?: () => void } = {};
 
   constructor(
     readonly engine: Engine,
@@ -15,12 +19,19 @@ export class Instance {
 
   child(): Instance {
     const inst = new Instance(this.engine);
+    inst.parent = this;
     this.children.push(inst);
     return inst;
   }
 
+  lookupProvide(key: string): unknown {
+    if (Object.prototype.hasOwnProperty.call(this.provides, key)) return this.provides[key];
+    return this.parent?.lookupProvide(key);
+  }
+
   destroy(): void {
     this.detached = true;
+    this.hooks.unmounted?.();
     for (const child of this.children) child.destroy();
     this.children.length = 0;
     for (const site of this.sites) {

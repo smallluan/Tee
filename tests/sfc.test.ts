@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { compileSFC, parseSFC } from "tee";
+import { compileSFC, parseSFC, scopeCss } from "tee";
 import Hello from "./fixtures/hello.tee";
 import HelloCard from "./fixtures/hello-card.tee";
 import { mount, tick } from "./helpers";
 
 describe("Tee SFC", () => {
+  it("scopes selectors after Less variables", () => {
+    const css = scopeCss(`@gold: #b8893a;\n.chip { color: @gold; }`, "data-t-x");
+    expect(css).toContain(".chip[data-t-x]");
+    expect(css).toContain("@gold: #b8893a;");
+  });
+
   it("parses nested template blocks used by t-slot", () => {
     const sfc = parseSFC(`
       <template>
@@ -22,11 +28,12 @@ describe("Tee SFC", () => {
     expect(sfc.script).toContain("export default");
   });
 
-  it("compiles the template to an AST factory at build time", () => {
+  it("compiles native HTML to createElement factories", () => {
     const js = compileSFC(`<template><p>{{ n }}</p></template><script>export default { data: () => ({ n: 1 }) }</script>`);
-    expect(js).toContain("__ast");
-    expect(js).toContain("__mountAST");
-    expect(js).toContain('"live"');
+    expect(js).toContain("__rt.el");
+    expect(js).toContain("__rt.live");
+    expect(js).toContain('"n"');
+    expect(js).not.toContain("__ast");
     expect(js).not.toContain("innerHTML");
   });
 

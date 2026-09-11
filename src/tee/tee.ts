@@ -1,16 +1,27 @@
-import { mountTemplate, type CompileContext } from "./compile";
+import { mountTemplate, applyInject, applyProvide, type CompileContext } from "./compile";
 import { Engine } from "./engine";
 import { Instance } from "./instance";
 import { createRootScope, type Scope } from "./scope";
-import type { MapSnapshot, TagDef, TeeOptions } from "./types";
+import type { MapSnapshot, TagDef, TeeOptions, TeePlugin } from "./types";
 
 const registry = new Map<string, TagDef>();
+let currentApp: TeeApp | null = null;
 
-export const version = "0.4.0";
+export const version = "0.6.0";
 
 export function define(name: string, def: TagDef): TagDef {
   registry.set(name.toLowerCase(), def);
   return def;
+}
+
+export function nextTick(fn?: () => void): Promise<void> {
+  const p = currentApp ? currentApp.tick() : Promise.resolve();
+  return fn ? p.then(() => fn()) : p;
+}
+
+export function use(plugin: TeePlugin): typeof Tee {
+  plugin.install(Tee);
+  return Tee;
 }
 
 export class TeeApp {
@@ -21,9 +32,11 @@ export class TeeApp {
   private stopFlush?: () => void;
 
   constructor(options: TeeOptions) {
+    currentApp = this;
     this.engine = new Engine();
     this.instance = new Instance(this.engine);
     const data = resolveData(options.data);
+    applyInject(this.instance, options.inject, data);
     this.scope = createRootScope(
       this.engine,
       data,
@@ -33,6 +46,8 @@ export class TeeApp {
       this.instance,
     );
     this.instance.scope = this.scope;
+    applyProvide(this.instance, options.provide, this.scope);
+    options.created?.call(this.scope);
     options.setup?.(this.scope);
 
     const host = resolveEl(options.el);
@@ -48,7 +63,12 @@ export class TeeApp {
     if (options.render) options.render(ctx, host);
     else mountTemplate(html, host, this.scope, ctx);
     this.el = host;
+    (this.scope as { $el?: Element }).$el = host;
+    options.mounted?.call(this.scope);
     options.ready?.(this.scope);
+    this.instance.hooks.updated = () => options.updated?.call(this.scope);
+    this.instance.hooks.unmounted = () => options.unmounted?.call(this.scope);
+    this.stopFlush = this.engine.onFlush(() => fireUpdated(this.instance));
   }
 
   get data(): Record<string, unknown> {
@@ -76,11 +96,17 @@ export class TeeApp {
     this.instance.destroy();
     this.engine.destroy();
     this.el.innerHTML = "";
+    if (currentApp === this) currentApp = null;
   }
 }
 
 export function create(options: TeeOptions): TeeApp {
   return new TeeApp(options);
+}
+
+function fireUpdated(inst: Instance): void {
+  inst.hooks.updated?.();
+  for (const child of inst.children) fireUpdated(child);
 }
 
 function resolveData(data: TeeOptions["data"]): Record<string, unknown> {
@@ -102,4 +128,6 @@ export const Tee = {
   version,
   define,
   create,
+  use,
+  nextTick,
 };

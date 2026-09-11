@@ -12,6 +12,7 @@
 }
 
 * { box-sizing: border-box; }
+[t-cloak] { display: none !important; }
 html { scroll-behavior: smooth; }
 html, body {
   margin: 0;

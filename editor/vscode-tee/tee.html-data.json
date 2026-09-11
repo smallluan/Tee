@@ -1,0 +1,101 @@
+{
+  "version": 1.1,
+  "tags": [
+    {
+      "name": "template",
+      "description": "Tee SFC template block.",
+      "attributes": []
+    }
+  ],
+  "globalAttributes": [
+    {
+      "name": "t-if",
+      "description": "Conditionally mount this node. Pair with t-else-if / t-else."
+    },
+    {
+      "name": "t-else-if",
+      "description": "Else-if branch of a t-if chain."
+    },
+    {
+      "name": "t-else",
+      "description": "Else branch of a t-if chain.",
+      "valueSet": "v"
+    },
+    {
+      "name": "t-show",
+      "description": "Insert or remove this node from the real DOM."
+    },
+    {
+      "name": "t-repeat",
+      "description": "Repeat this node. `item in list` or `(item, index) in list`."
+    },
+    {
+      "name": "t-for",
+      "description": "Alias of t-repeat."
+    },
+    {
+      "name": "t-key",
+      "description": "Stable key for t-repeat reuse."
+    },
+    {
+      "name": "t-model",
+      "description": "Two-way bind an input. Modifiers: .lazy .number .trim"
+    },
+    {
+      "name": "t-html",
+      "description": "Set innerHTML from an expression."
+    },
+    {
+      "name": "t-text",
+      "description": "Set textContent from an expression."
+    },
+    {
+      "name": "t-ref",
+      "description": "Expose this element on $refs."
+    },
+    {
+      "name": "t-pre",
+      "description": "Skip compiling this subtree."
+    },
+    {
+      "name": "t-once",
+      "description": "Bind this subtree once, then freeze."
+    },
+    {
+      "name": "t-cloak",
+      "description": "Hide until compiled. Pair with [t-cloak] { display:none }."
+    },
+    {
+      "name": "t-bind",
+      "description": "Spread an object of attributes onto this node."
+    },
+    {
+      "name": "t-slot",
+      "description": "Named slot filler on a custom tag."
+    },
+    {
+      "name": "t-bind:class",
+      "description": "Class binding: string, array, or { name: cond }."
+    },
+    {
+      "name": "t-bind:style",
+      "description": "Style binding: object of CSS properties."
+    },
+    {
+      "name": "t-bind:disabled",
+      "description": "Boolean attribute binding."
+    },
+    {
+      "name": "t-on:click",
+      "description": "Click handler. Modifiers: .prevent .stop .once .self .capture"
+    },
+    {
+      "name": "t-on:input",
+      "description": "Input handler."
+    },
+    {
+      "name": "t-on:submit",
+      "description": "Submit handler. Combine with .prevent."
+    }
+  ]
+}

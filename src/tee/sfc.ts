@@ -1,15 +1,22 @@
+import { generateRenderBody } from "./codegen.ts";
 import { parseHTML } from "./html.ts";
+
+export interface SFCStyleBlock {
+  content: string;
+  lang: string;
+  scoped: boolean;
+}
 
 export interface SFCDescriptor {
   template?: string;
   script?: string;
   scriptLang: "js" | "ts";
-  styles: string[];
+  styles: SFCStyleBlock[];
 }
 
 /** Split a .tee file into template / script / style, counting nested `<template>` (t-slot). */
 export function parseSFC(source: string): SFCDescriptor {
-  const styles: string[] = [];
+  const styles: SFCStyleBlock[] = [];
   let template: string | undefined;
   let script: string | undefined;
   let scriptLang: "js" | "ts" = "js";
@@ -26,7 +33,11 @@ export function parseSFC(source: string): SFCDescriptor {
     else if (tag === "script" && script == null) {
       script = trimBlock(block.content);
       scriptLang = /\blang\s*=\s*['"]ts['"]/i.test(open[2]) ? "ts" : "js";
-    } else if (tag === "style") styles.push(trimBlock(block.content));
+    } else if (tag === "style") {
+      const lang = /lang\s*=\s*['"]([\w-]+)['"]/i.exec(open[2])?.[1] ?? "css";
+      const scoped = /\bscoped\b/i.test(open[2]);
+      styles.push({ content: trimBlock(block.content), lang, scoped });
+    }
     i = block.end;
   }
   return { template, script, scriptLang, styles };
@@ -67,32 +78,62 @@ function trimBlock(content: string): string {
   return content.replace(/^\n/, "").replace(/\n\s*$/, "\n").trimEnd();
 }
 
+export function hashScopeId(filename: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < filename.length; i++) {
+    hash ^= filename.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return "data-t-" + (hash >>> 0).toString(36);
+}
+
+export function scopeCss(css: string, scopeId: string): string {
+  return css.replace(/(^|[{};])(\s*)([.#:[\]*a-zA-Z][^{}@]*)\{/g, (full, lead: string, ws: string, selectors: string) => {
+    const trimmed = selectors.trim();
+    if (!trimmed) return full;
+    const next = trimmed
+      .split(",")
+      .map((sel) => {
+        const piece = sel.trim();
+        if (!piece) return sel;
+        return `${piece}[${scopeId}]`;
+      })
+      .join(", ");
+    return `${lead}${ws}${next}{`;
+  });
+}
+
 /** Turn a .tee source file into a JS module. HTML is parsed here (build time), not in the browser. */
 export function compileSFC(source: string, filename = "anon.tee"): string {
   const sfc = parseSFC(source);
   const ast = parseHTML(sfc.template ?? "");
+  const scopeId = sfc.styles.some((block) => block.scoped) ? hashScopeId(filename) : "";
   let script = (sfc.script ?? "export default {}").trim();
   if (!/\bexport\s+default\b/.test(script)) script += "\nexport default {}";
   script = script.replace(/\bexport\s+default\b/, "const __default =");
-  const styles = sfc.styles
-    .map(
-      (css, i) =>
-        `if (typeof document !== "undefined") { const __style${i} = document.createElement("style"); __style${i}.setAttribute("data-tee", ${JSON.stringify(filename + ":" + i)}); __style${i}.textContent = ${JSON.stringify(css)}; document.head.appendChild(__style${i}); }`,
-    )
+  const styleImports = sfc.styles
+    .map((block, i) => {
+      const lang = block.lang && block.lang !== "css" ? `&lang.${block.lang}` : "";
+      return `import ${JSON.stringify(`${filename}?tee&type=style&index=${i}${lang}`)};`;
+    })
     .join("\n");
+  const body = generateRenderBody(ast);
   return `${script}
 
-import { define as __teeDefine, mountAST as __mountAST } from "tee";
+import { define as __teeDefine, rt as __rt } from "tee";
+${styleImports}
 
-const __ast = ${JSON.stringify(ast)};
+const __scopeId = ${JSON.stringify(scopeId)};
 
 function __render(ctx, parent) {
-  __mountAST(__ast, parent, ctx.scope, ctx);
-}
+  if (__scopeId) ctx.scopeId = __scopeId;
+  const s = ctx.scope;
+${body}}
 
 __default.render = __render;
 if (__default.tag) __teeDefine(__default.tag, __default);
-${styles}
 export default __default;
+
+if (import.meta.hot) import.meta.hot.accept();
 `;
 }

@@ -1,0 +1,110 @@
+{
+  "name": "Tee",
+  "scopeName": "source.tee",
+  "fileTypes": ["tee"],
+  "patterns": [
+    { "include": "#template" },
+    { "include": "#script" },
+    { "include": "#style" },
+    { "include": "#style-scss" },
+    { "include": "#style-css" }
+  ],
+  "repository": {
+    "template": {
+      "begin": "(<)(template)(\\s[^>]*)?(>)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.html" },
+        "2": { "name": "entity.name.tag.template.tee" },
+        "3": { "name": "meta.tag.attributes.tee" },
+        "4": { "name": "punctuation.definition.tag.end.html" }
+      },
+      "end": "(</)(template)(>)",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.html" },
+        "2": { "name": "entity.name.tag.template.tee" },
+        "3": { "name": "punctuation.definition.tag.end.html" }
+      },
+      "name": "text.html.tee",
+      "patterns": [{ "include": "#html" }]
+    },
+    "script": {
+      "begin": "(<)(script)(\\s[^>]*)?(>)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.html" },
+        "2": { "name": "entity.name.tag.script.tee" },
+        "3": { "name": "meta.tag.attributes.tee" },
+        "4": { "name": "punctuation.definition.tag.end.html" }
+      },
+      "end": "(</)(script)(>)",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.html" },
+        "2": { "name": "entity.name.tag.script.tee" },
+        "3": { "name": "punctuation.definition.tag.end.html" }
+      },
+      "name": "source.ts.embedded.tee",
+      "contentName": "source.ts",
+      "patterns": [{ "include": "source.ts" }]
+    },
+    "style": {
+      "begin": "(<)(style)(?=[^>]*lang\\s*=\\s*['\"]less['\"])([^>]*)(>)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.html" },
+        "2": { "name": "entity.name.tag.style.tee" },
+        "4": { "name": "punctuation.definition.tag.end.html" }
+      },
+      "end": "(</)(style)(>)",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.html" },
+        "2": { "name": "entity.name.tag.style.tee" },
+        "3": { "name": "punctuation.definition.tag.end.html" }
+      },
+      "name": "source.less.embedded.tee",
+      "contentName": "source.less",
+      "patterns": [{ "include": "source.less" }]
+    },
+    "style-scss": {
+      "begin": "(<)(style)(?=[^>]*lang\\s*=\\s*['\"]s[ac]ss['\"])([^>]*)(>)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.html" },
+        "2": { "name": "entity.name.tag.style.tee" },
+        "4": { "name": "punctuation.definition.tag.end.html" }
+      },
+      "end": "(</)(style)(>)",
+      "name": "source.scss.embedded.tee",
+      "contentName": "source.css.scss",
+      "patterns": [{ "include": "source.css.scss" }]
+    },
+    "style-css": {
+      "begin": "(<)(style)(\\s[^>]*)?(>)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.html" },
+        "2": { "name": "entity.name.tag.style.tee" },
+        "4": { "name": "punctuation.definition.tag.end.html" }
+      },
+      "end": "(</)(style)(>)",
+      "name": "source.css.embedded.tee",
+      "contentName": "source.css",
+      "patterns": [{ "include": "source.css" }]
+    },
+    "html": {
+      "patterns": [
+        { "include": "#interpolation" },
+        { "include": "#directive" },
+        { "include": "text.html.basic" }
+      ]
+    },
+    "interpolation": {
+      "begin": "\\{\\{",
+      "beginCaptures": { "0": { "name": "punctuation.definition.interpolation.begin.tee" } },
+      "end": "\\}\\}",
+      "endCaptures": { "0": { "name": "punctuation.definition.interpolation.end.tee" } },
+      "name": "meta.interpolation.tee",
+      "contentName": "source.ts",
+      "patterns": [{ "include": "source.ts" }]
+    },
+    "directive": {
+      "match": "\\b(t-(?:if|else-if|elif|else|show|repeat|for|key|model|html|text|ref|pre|once|cloak|slot|bind|on))(?:[:.][\\w.-]+)?",
+      "name": "entity.other.attribute-name.directive.tee"
+    }
+  }
+}

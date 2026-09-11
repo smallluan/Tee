@@ -1,0 +1,9 @@
+{
+  "files.associations": {
+    "*.tee": "html"
+  },
+  "html.customData": ["./.vscode/tee.html-data.json"],
+  "emmet.includeLanguages": {
+    "tee": "html"
+  }
+}

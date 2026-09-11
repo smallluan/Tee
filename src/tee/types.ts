@@ -29,6 +29,7 @@ export type WatchHandler = (next: unknown, prev: unknown) => void;
 export interface WatchOption {
   handler: WatchHandler;
   deep?: boolean;
+  immediate?: boolean;
 }
 
 export type WatchSource = WatchHandler | WatchOption;
@@ -41,10 +42,20 @@ export interface MethodMap {
   [name: string]: (this: Record<string, unknown>, ...args: unknown[]) => unknown;
 }
 
-export interface TagDef {
+export interface LifecycleHooks {
+  created?: (this: Record<string, unknown>) => void;
+  mounted?: (this: Record<string, unknown>) => void;
+  updated?: (this: Record<string, unknown>) => void;
+  unmounted?: (this: Record<string, unknown>) => void;
+}
+
+export interface TagDef extends LifecycleHooks {
   template?: string;
   render?: (ctx: import("./compile").CompileContext, parent: Node) => void;
   tag?: string;
+  props?: string[] | Record<string, { default?: unknown }>;
+  provide?: Record<string, unknown> | ((this: Record<string, unknown>) => Record<string, unknown>);
+  inject?: string[] | Record<string, string | { from?: string; default?: unknown }>;
   data?: () => Record<string, unknown>;
   computed?: ComputedMap;
   watch?: Record<string, WatchSource>;
@@ -52,7 +63,7 @@ export interface TagDef {
   setup?: (scope: Record<string, unknown>) => void;
 }
 
-export interface TeeOptions {
+export interface TeeOptions extends LifecycleHooks {
   el?: string | Element;
   template?: string;
   render?: (ctx: import("./compile").CompileContext, parent: Node) => void;
@@ -60,9 +71,15 @@ export interface TeeOptions {
   computed?: ComputedMap;
   watch?: Record<string, WatchSource>;
   methods?: MethodMap;
+  provide?: Record<string, unknown> | ((this: Record<string, unknown>) => Record<string, unknown>);
+  inject?: string[] | Record<string, string | { from?: string; default?: unknown }>;
   tags?: Record<string, TagDef>;
   setup?: (scope: Record<string, unknown>) => void;
   ready?: (scope: Record<string, unknown>) => void;
+}
+
+export interface TeePlugin {
+  install: (app: { version: string; define: typeof import("./tee").define; create: typeof import("./tee").create }) => void;
 }
 
 export interface MapSnapshot {

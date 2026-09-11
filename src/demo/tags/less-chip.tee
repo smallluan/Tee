@@ -1,0 +1,23 @@
+<template>
+  <span class="chip">{{ label }}</span>
+</template>
+
+<script>
+export default {
+  tag: "less-chip",
+  props: ["label"],
+};
+</script>
+
+<style lang="less" scoped>
+@gold: #b8893a;
+.chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: fade(@gold, 22%);
+  color: darken(@gold, 14%);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+</style>

@@ -1,10 +1,13 @@
 {
   "name": "tee",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "description": "Tee — a point-to-point reactive frontend framework driven by bidirectional DOM maps, not a virtual DOM.",
   "type": "module",
   "main": "./src/tee/index.ts",
   "module": "./src/tee/index.ts",
+  "bin": {
+    "create-tee": "./scripts/create-tee.mjs"
+  },
   "exports": {
     ".": "./src/tee/index.ts",
     "./plugin": "./src/tee/plugin.ts"
@@ -14,7 +17,11 @@
     "build": "vite build",
     "preview": "vite preview --port 43151 --host 0.0.0.0",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "create": "node scripts/create-tee.mjs"
+  },
+  "dependencies": {
+    "less": "^4.4.2"
   },
   "keywords": [
     "tee",

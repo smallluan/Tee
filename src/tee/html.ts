@@ -2,13 +2,21 @@ import { splitInterpolation } from "./expr.ts";
 
 export type TmplAttr =
   | { kind: "static"; name: string; value: string }
-  | { kind: "on"; event: string; value: string }
+  | { kind: "on"; event: string; value: string; mods: string[] }
   | { kind: "bind"; name: string; value: string }
-  | { kind: "model"; value: string }
+  | { kind: "model"; value: string; mods: string[] }
   | { kind: "show"; value: string }
+  | { kind: "if"; value: string }
+  | { kind: "elif"; value: string }
+  | { kind: "else"; value: string }
   | { kind: "repeat"; value: string }
   | { kind: "key"; value: string }
-  | { kind: "slot"; value: string };
+  | { kind: "slot"; value: string }
+  | { kind: "html"; value: string }
+  | { kind: "text"; value: string }
+  | { kind: "ref"; value: string }
+  | { kind: "pre"; value: string }
+  | { kind: "once"; value: string };
 
 export interface ElNode {
   t: "el";
@@ -179,13 +187,28 @@ class HtmlParser {
 
 function classifyAttr(name: string, value: string): TmplAttr {
   const lower = name.toLowerCase();
-  if (lower.startsWith("t-on:")) return { kind: "on", event: name.slice(5), value };
+  if (lower.startsWith("t-on:")) {
+    const [event, ...mods] = name.slice(5).split(".");
+    return { kind: "on", event, value, mods };
+  }
+  if (lower === "t-bind") return { kind: "bind", name: "", value };
   if (lower.startsWith("t-bind:")) return { kind: "bind", name: name.slice(7), value };
-  if (lower === "t-model") return { kind: "model", value };
+  if (lower === "t-model" || lower.startsWith("t-model.")) {
+    const mods = lower.slice("t-model".length).split(".").filter(Boolean);
+    return { kind: "model", value, mods };
+  }
   if (lower === "t-show") return { kind: "show", value };
-  if (lower === "t-repeat") return { kind: "repeat", value };
+  if (lower === "t-if") return { kind: "if", value };
+  if (lower === "t-else-if" || lower === "t-elif") return { kind: "elif", value };
+  if (lower === "t-else") return { kind: "else", value: "" };
+  if (lower === "t-repeat" || lower === "t-for") return { kind: "repeat", value };
   if (lower === "t-key") return { kind: "key", value };
   if (lower === "t-slot") return { kind: "slot", value: value || "default" };
+  if (lower === "t-html") return { kind: "html", value };
+  if (lower === "t-text") return { kind: "text", value };
+  if (lower === "t-ref") return { kind: "ref", value };
+  if (lower === "t-pre") return { kind: "pre", value: "" };
+  if (lower === "t-once") return { kind: "once", value: "" };
   if (value.includes("{{")) return { kind: "bind", name, value: interpolateToExpr(value) };
   return { kind: "static", name, value };
 }
@@ -212,4 +235,8 @@ export function attrValue(attrs: TmplAttr[], kind: TmplAttr["kind"]): string | u
 
 export function staticAttrs(attrs: TmplAttr[]): Array<{ name: string; value: string }> {
   return attrs.filter((a): a is Extract<TmplAttr, { kind: "static" }> => a.kind === "static");
+}
+
+export function isVoidTag(tag: string): boolean {
+  return VOID.has(tag);
 }
