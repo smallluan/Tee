@@ -1,0 +1,32 @@
+{
+  "name": "tee",
+  "version": "0.1.0",
+  "description": "Tee — a point-to-point reactive frontend framework driven by bidirectional DOM maps, not a virtual DOM.",
+  "type": "module",
+  "main": "./src/tee/index.ts",
+  "module": "./src/tee/index.ts",
+  "exports": {
+    ".": "./src/tee/index.ts"
+  },
+  "scripts": {
+    "dev": "vite --port 43151 --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --port 43151 --host 0.0.0.0",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "tee",
+    "reactive",
+    "framework",
+    "bidirectional-map",
+    "no-virtual-dom"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "happy-dom": "^20.14.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0"
+  }
+}
