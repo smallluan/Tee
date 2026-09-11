@@ -10,6 +10,8 @@ export default defineConfig({
   resolve: {
     alias: {
       tee: resolve(root, "src/tee/index.ts"),
+      "tee-framework": resolve(root, "src/tee/index.ts"),
+      "tee-framework/plugin": resolve(root, "src/tee/plugin.ts"),
     },
   },
   test: {

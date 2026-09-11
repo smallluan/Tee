@@ -120,7 +120,7 @@ export function compileSFC(source: string, filename = "anon.tee"): string {
   const body = generateRenderBody(ast);
   return `${script}
 
-import { define as __teeDefine, rt as __rt } from "tee";
+import { define as __teeDefine, rt as __rt } from "tee-framework";
 ${styleImports}
 
 const __scopeId = ${JSON.stringify(scopeId)};

@@ -1,0 +1,25 @@
+{
+  "name": "create-tee",
+  "version": "0.6.0",
+  "description": "Scaffold a Tee app (Vite + .tee SFCs).",
+  "type": "module",
+  "bin": {
+    "create-tee": "./index.mjs"
+  },
+  "files": [
+    "index.mjs"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "tee",
+    "create-tee",
+    "scaffold",
+    "vite"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "tee-framework": "0.6.0"
+  }
+}

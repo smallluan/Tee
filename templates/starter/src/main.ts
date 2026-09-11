@@ -1,4 +1,4 @@
-import { Tee } from "tee";
+import { Tee } from "tee-framework";
 import App from "./App.tee";
 
 Tee.create({

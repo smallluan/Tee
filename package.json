@@ -1,5 +1,5 @@
 {
-  "name": "tee",
+  "name": "tee-framework",
   "version": "0.6.0",
   "description": "Tee — a point-to-point reactive frontend framework driven by bidirectional DOM maps, not a virtual DOM.",
   "type": "module",
@@ -10,18 +10,35 @@
   },
   "exports": {
     ".": "./src/tee/index.ts",
-    "./plugin": "./src/tee/plugin.ts"
+    "./plugin": "./src/tee/plugin.ts",
+    "./create": "./scripts/create-tee.mjs",
+    "./package.json": "./package.json"
   },
+  "files": [
+    "src/tee",
+    "scripts",
+    "templates",
+    "editor",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "vite --port 43151 --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --port 43151 --host 0.0.0.0",
     "test": "vitest run",
     "test:watch": "vitest",
-    "create": "node scripts/create-tee.mjs"
+    "create": "node scripts/create-tee.mjs",
+    "prepublishOnly": "vitest run"
   },
-  "dependencies": {
-    "less": "^4.4.2"
+  "peerDependencies": {
+    "less": "^4.0.0",
+    "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "less": {
+      "optional": true
+    }
   },
   "keywords": [
     "tee",
@@ -31,8 +48,12 @@
     "no-virtual-dom"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "happy-dom": "^20.14.3",
+    "less": "^4.4.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.0"

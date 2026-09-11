@@ -13,7 +13,7 @@ describe("create-tee", () => {
         encoding: "utf8",
       });
       const pkg = JSON.parse(readFileSync(join(dest, "package.json"), "utf8"));
-      expect(pkg.dependencies.tee).toMatch(/^file:/);
+      expect(pkg.dependencies["tee-framework"]).toMatch(/^file:/);
       expect(readFileSync(join(dest, "src/App.tee"), "utf8")).toContain("lang=\"less\"");
       expect(readFileSync(join(dest, "src/main.ts"), "utf8")).toContain("Tee.create");
       expect(readFileSync(join(dest, ".vscode/settings.json"), "utf8")).toContain("*.tee");

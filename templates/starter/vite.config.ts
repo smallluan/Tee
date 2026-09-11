@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import { tee } from "tee/plugin";
+import { tee } from "tee-framework/plugin";
 
 export default defineConfig({
   plugins: [tee()],

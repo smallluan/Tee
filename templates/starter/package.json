@@ -9,7 +9,7 @@
     "preview": "vite preview --port 43152 --host 0.0.0.0"
   },
   "dependencies": {
-    "tee": "file:../.."
+    "tee-framework": "file:../.."
   },
   "devDependencies": {
     "less": "^4.4.2",

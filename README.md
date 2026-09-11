@@ -19,22 +19,33 @@ Tee 是一个面向生产的响应式前端框架。它**不使用虚拟 DOM**�
 
 ## 一键创建项目
 
-和 `npm create vite` 一样：
+`tee` 这个 npm 名字已被占用，包名是 **`tee-framework`**。脚手架包是 **`create-tee`**。
 
 ```bash
-npx create-tee my-app
+npm create tee@latest my-app
 cd my-app
 npm install
 npm run dev
 ```
 
-在本仓库里也可以：
+或：
+
+```bash
+npx create-tee my-app
+```
+
+在本仓库里（还没装全局脚手架时）：
 
 ```bash
 node scripts/create-tee.mjs my-app
 ```
 
 生成的工程带 Vite、`.tee` 单文件组件、Less scoped、以及编辑器补全配置。
+
+```ts
+import { Tee } from "tee-framework";
+import { tee } from "tee-framework/plugin";
+```
 
 ## 本仓库演示
 
@@ -98,8 +109,8 @@ p { color: @leaf; }
 ```
 
 ```ts
-import { tee } from "tee/plugin";
-import { Tee } from "tee";
+import { tee } from "tee-framework/plugin";
+import { Tee } from "tee-framework";
 import App from "./App.tee";
 
 export default defineConfig({ plugins: [tee()] });
@@ -155,3 +166,5 @@ editor/              语法、补全、VS Code 扩展
 ```
 
 公开入口：`Tee.create`、`Tee.define`、`Tee.use`、`Tee.nextTick`、`Tee.version`。
+
+npm 包：`tee-framework`（运行时 + Vite 插件）、`create-tee`（脚手架）。
