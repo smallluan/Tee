@@ -68,9 +68,62 @@ export function createRootScope(
     return fn ? p.then(fn) : p;
   };
 
+  instance.extras = extras;
   scope = makeScope(engine, reactive, extras, null, instance);
+  SCOPE_HOST.set(scope, instance);
   if (watch) bindWatchers(engine, scope, watch, instance);
   return scope;
+}
+
+export const SCOPE_HOST = new WeakMap<Scope, Instance>();
+
+export function defineDerived(
+  instance: Instance,
+  name: string,
+  getter: () => unknown,
+): void {
+  const engine = instance.engine;
+  const reader = bindComputed(engine, name, getter, instance);
+  COMPUTED.add(reader);
+  instance.extras[name] = reader;
+}
+
+export function defineAct(
+  instance: Instance,
+  name: string,
+  fn: (...args: unknown[]) => unknown,
+): void {
+  instance.extras[name] = fn;
+}
+
+export function defineTrail(
+  instance: Instance,
+  label: string,
+  run: () => void,
+): void {
+  const engine = instance.engine;
+  const site: import("./types").Site = {
+    id: engine.nextSiteId(),
+    kind: "watch",
+    node: null,
+    label: `trail ${label}`,
+    rank: Rank.Watch,
+    run: () => {
+      if (site.dead) return;
+      if (site.linked && !engine.stale(site)) {
+        engine.stats.skipClock += 1;
+        return;
+      }
+      engine.startTrack();
+      try {
+        run();
+      } finally {
+        engine.commitTrack(site, engine.stopTrack());
+      }
+    },
+  };
+  instance.sites.push(site);
+  site.run();
 }
 
 function bindComputed(
@@ -280,6 +333,10 @@ export function runStatement(scope: Scope, src: string, event?: Event): unknown 
     scope.$assign(plan.path.join("."), value);
     return value;
   }
-  if (plan.t === "call") return plan.run((name) => scope.$lookup(name));
+  if (plan.t === "call") {
+    const value = plan.run((name) => scope.$lookup(name));
+    if (typeof value === "function") return value.call(scope, event);
+    return value;
+  }
   return runStmt(src, scope, event);
 }

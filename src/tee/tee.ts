@@ -1,13 +1,14 @@
 import { mountTemplate, applyInject, applyProvide, type CompileContext } from "./compile";
 import { Engine } from "./engine";
 import { Instance } from "./instance";
+import { runWeave, weave } from "./chart";
 import { createRootScope, type Scope } from "./scope";
 import type { MapSnapshot, TagDef, TeeOptions, TeePlugin } from "./types";
 
 const registry = new Map<string, TagDef>();
 let currentApp: TeeApp | null = null;
 
-export const version = "0.6.0";
+export const version = "0.7.0";
 
 export function define(name: string, def: TagDef): TagDef {
   registry.set(name.toLowerCase(), def);
@@ -49,6 +50,7 @@ export class TeeApp {
     applyProvide(this.instance, options.provide, this.scope);
     options.created?.call(this.scope);
     options.setup?.(this.scope);
+    if (options.weave) runWeave(this.scope, options.weave);
 
     const host = resolveEl(options.el);
     const html = options.template ?? (options.render ? "" : host.innerHTML);
@@ -67,8 +69,9 @@ export class TeeApp {
     (this.scope as { $el?: Element }).$el = host;
     options.mounted?.call(this.scope);
     options.ready?.(this.scope);
-    this.instance.hooks.updated = () => options.updated?.call(this.scope);
-    this.instance.hooks.unmounted = () => options.unmounted?.call(this.scope);
+    this.instance.hooks.pin?.();
+    this.instance.hooks.updated = chainHook(this.instance.hooks.updated, () => options.updated?.call(this.scope));
+    this.instance.hooks.unmounted = chainHook(this.instance.hooks.unmounted, () => options.unmounted?.call(this.scope));
     this.stopFlush = this.engine.onFlush(() => fireUpdated(this.instance));
   }
 
@@ -110,6 +113,15 @@ function fireUpdated(inst: Instance): void {
   for (const child of inst.children) fireUpdated(child);
 }
 
+function chainHook(prev: (() => void) | undefined, next: () => void): () => void {
+  return prev
+    ? () => {
+        prev();
+        next();
+      }
+    : next;
+}
+
 function resolveData(data: TeeOptions["data"]): Record<string, unknown> {
   if (!data) return {};
   return typeof data === "function" ? data() : { ...data };
@@ -131,4 +143,5 @@ export const Tee = {
   create,
   use,
   nextTick,
+  weave,
 };

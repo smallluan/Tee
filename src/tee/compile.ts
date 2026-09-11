@@ -5,6 +5,7 @@ import { compileExpr } from "./ir";
 import { Instance } from "./instance";
 import { touchList } from "./observe";
 import { runExpr, runStatement, type Scope, createRootScope } from "./scope";
+import { runWeave } from "./chart";
 import { Rank, rankOf } from "./strata";
 import type { Site, TagDef } from "./types";
 
@@ -934,6 +935,7 @@ function mountTagNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileCont
   applyProvide(inst, def.provide, innerScope);
   def.created?.call(innerScope);
   def.setup?.(innerScope);
+  if (def.weave) runWeave(innerScope, def.weave);
   for (const name of propNames) {
     const bound = node.attrs.find((attr) => attr.kind === "bind" && attr.name === name);
     if (!bound) continue;
@@ -966,8 +968,18 @@ function mountTagNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileCont
   }
   parent.append(...mount.childNodes);
   def.mounted?.call(innerScope);
-  inst.hooks.updated = () => def.updated?.call(innerScope);
-  inst.hooks.unmounted = () => def.unmounted?.call(innerScope);
+  inst.hooks.pin?.();
+  inst.hooks.updated = chainHook(inst.hooks.updated, () => def.updated?.call(innerScope));
+  inst.hooks.unmounted = chainHook(inst.hooks.unmounted, () => def.unmounted?.call(innerScope));
+}
+
+function chainHook(prev: (() => void) | undefined, next: () => void): () => void {
+  return prev
+    ? () => {
+        prev();
+        next();
+      }
+    : next;
 }
 
 function listPropNames(props: TagDef["props"]): string[] {

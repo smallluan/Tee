@@ -1,4 +1,6 @@
 export { Tee, TeeApp, create, define, use, nextTick, version } from "./tee";
+export { weave, chartOf, ChartApi } from "./chart";
+export type { Chart, WeaveFn, WeaveDef } from "./chart";
 export type { TeeOptions, TagDef, MapSnapshot, SiteSnapshot, WatchSource } from "./types";
 export { TwinMap } from "./maps";
 export { Engine } from "./engine";

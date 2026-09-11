@@ -23,18 +23,16 @@
 </template>
 
 <script lang="ts">
-export default {
-  data: () => ({
+import { weave } from "tee-framework";
+
+export default weave((c) => {
+  c.hold({
     title: "新的 Tee 应用",
     guest: "",
     count: 0,
-  }),
-  computed: {
-    doubled() {
-      return Number(this.count) * 2;
-    },
-  },
-};
+  });
+  c.derive("doubled", () => Number(c.count) * 2);
+});
 </script>
 
 <style lang="less" scoped>

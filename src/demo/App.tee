@@ -282,7 +282,8 @@
           <tr><th>接口</th><th>作用</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>Tee.create(options)</code></td><td>挂载应用。options：el、template、data、computed、watch、methods、tags。</td></tr>
+          <tr><td><code>weave(c => …)</code></td><td>往 Chart 上记账：hold / derive / trail / act / pin。组合是函数嵌套，不是返回一包 ref。</td></tr>
+          <tr><td><code>Tee.create(options)</code></td><td>挂载。options 可以是 weave，也可以是 data/computed 对象填法。</td></tr>
           <tr><td><code>Tee.define(name, def)</code></td><td>注册自定义标签。def 可含 template、data、computed、methods、watch。</td></tr>
           <tr><td><code>{{ syntaxExpr }}</code></td><td>插值。每个表达式一个活文本节点。</td></tr>
           <tr><td><code>t-if</code> / <code>t-else-if</code> / <code>t-else</code></td><td>互斥分支，同一时刻只存在一块真实 DOM。</td></tr>

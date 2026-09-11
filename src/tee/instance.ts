@@ -10,7 +10,8 @@ export class Instance {
   parent: Instance | null = null;
   scope: Scope | null = null;
   detached = false;
-  hooks: { updated?: () => void; unmounted?: () => void } = {};
+  extras: Record<string, unknown> = {};
+  hooks: { pin?: () => void; updated?: () => void; unmounted?: () => void } = {};
 
   constructor(
     readonly engine: Engine,

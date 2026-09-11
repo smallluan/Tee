@@ -1,10 +1,17 @@
 <template>
-  <button class="btn" t-on:click="n = n + 1">独立组件状态：{{ n }}</button>
+  <button class="btn" t-on:click="bump">独立组件状态：{{ n }}</button>
 </template>
 
 <script>
-export default {
+import { weave } from "tee";
+
+export default weave({
   tag: "mini-counter",
-  data: () => ({ n: 0 }),
-};
+  install(c) {
+    c.hold({ n: 0 });
+    c.act("bump", () => {
+      c.n = Number(c.n) + 1;
+    });
+  },
+});
 </script>
