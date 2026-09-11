@@ -148,7 +148,7 @@ npm test
 | `.vue` + Less scoped | `.tee` + `lang="less"` scoped |
 | `setup` / `computed` / `watch` / `onMounted` / `ref` | 同名。合同不同：写在 `self` 上的名字就是模板名 |
 
-编辑器材料在 `editor/`：HTML custom data、TextMate 语法、`*.tee` 类型。
+编辑器：`editor/vscode-tee`（Tee 语言，不是 HTML）。`.tee` 里的 `{{ }}`、`t-*` 和 `tee-framework` 导入走扩展补全。
 
 ## `.tee` 单文件组件
 
@@ -195,9 +195,15 @@ Tee.create({ el: "#app", ...App });
 
 ## 编辑器
 
-- 仓库 `.vscode/settings.json`：`*.tee` 关联 HTML，并加载 `editor/tee.html-data.json`
-- `editor/vscode-tee`：TextMate 语法
-- `src/vite-env.d.ts`：`*.tee` 模块类型
+`.tee` 必须当成 **Tee** 语言，不能当 HTML。HTML 会把 `{{ }}` 和 `t-if="..."` 收成普通字符串，`<script>` 也不会走项目的 TypeScript，所以 `tee-framework` 没有导出补全。
+
+1. Command Palette → **Developer: Install Extension from Location…**
+2. 选 `editor/vscode-tee`（应用里是 `node_modules/tee-framework/editor/vscode-tee`）
+3. Reload，状态栏语言选 **Tee**
+
+扩展会：高亮插值和 `t-*` 指令、在 `<script>` 里提供 `setup` / `computed` 等补全、在模板表达式里提示 `self` 上的字段。
+
+`src/vite-env.d.ts` 给 `import App from "./App.tee"` 提供模块类型。
 
 ## Tee Strata
 

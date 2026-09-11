@@ -1,6 +1,6 @@
 {
   "name": "create-tee",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "Scaffold a Tee app (Vite + .tee SFCs).",
   "type": "module",
   "bin": {
@@ -20,6 +20,6 @@
     "access": "public"
   },
   "dependencies": {
-    "tee-framework": "^0.8.2"
+    "tee-framework": "^0.8.3"
   }
 }

@@ -1,16 +1,19 @@
 # Tee for VS Code / Cursor
 
-Language support for `.tee` single-file components:
+`.tee` is its own language, not HTML:
 
-- TextMate grammar: HTML template + TypeScript script + CSS / Less / Sass
-- Language configuration: comments, brackets, folding
-- HTML custom data: `t-if`, `t-repeat`, `t-model`, `t-on:*` completions
+- `<script>` is TypeScript — `import { setup, computed } from "tee-framework"` completes, hover shows signatures
+- `{{ guest }}` and `t-if="count === 0"` are TypeScript expressions, not strings
+- `t-if` / `t-repeat` / `t-on:click` complete on tags
 
-## Install from this repo
+## Install
 
-In Cursor / VS Code:
+Command Palette → **Developer: Install Extension from Location…** → this folder (`editor/vscode-tee`).
 
-1. Command Palette → **Developer: Install Extension from Location…**
-2. Choose the `editor/vscode-tee` folder in this repository
+Then reload the window. Workspace settings map `*.tee` → `tee`. If a file is still HTML, click the language mode in the status bar and pick **Tee**.
 
-Workspace settings in the Tee repo and in `create-tee` apps also map `*.tee` → HTML and load the same custom data, so completions work even without installing the extension.
+From a Tee app after `npm install`:
+
+```
+node_modules/tee-framework/editor/vscode-tee
+```

@@ -18,8 +18,16 @@ import type { TagDef } from "./types";
  * that writes onto `self` (or returns fields that get written onto `self`).
  */
 
-export type Self = CtxApi & Record<string, unknown>;
-export type Ctx = Self;
+/** Fields the template reads. `$refs` / `$emit` / `$nextTick` are always there; the rest are yours. */
+export interface SelfApi {
+  readonly $el?: Element;
+  readonly $refs: Record<string, Element | undefined>;
+  $emit(event: string, payload?: unknown): void;
+  $nextTick(fn?: () => void): Promise<void>;
+}
+
+export type Self = SelfApi & Record<string, unknown>;
+export type Ctx = Self & { readonly scope: Scope; readonly host: Instance };
 
 const stack: Ctx[] = [];
 
@@ -32,10 +40,12 @@ export interface Ref<T> {
 type RefBox<T> = Ref<T> & { __tee: "ref" };
 type ComputedBox<T> = Ref<T> & { __tee: "computed"; get: () => T };
 
+/** Box a value. Returning it from `setup()` writes the inner value onto `self` (template has no `.value`). */
 export function ref<T>(value: T): Ref<T> {
   return { __tee: "ref", value } as RefBox<T>;
 }
 
+/** Cached field on `self`. Template reads the same name — not `.value`. */
 export function computed<T>(get: () => T): Ref<T> {
   const box: ComputedBox<T> = {
     __tee: "computed",
@@ -54,6 +64,7 @@ export interface WatchOptions {
   immediate?: boolean;
 }
 
+/** Run after a source on `self` changes. Same name as Vue; no component re-render. */
 export function watch(effect: () => void): () => void;
 export function watch<T>(
   source: () => T,
@@ -95,6 +106,7 @@ export function watchEffect(effect: () => void): () => void {
   return watch(effect);
 }
 
+/** DOM is on the map. Same timing people expect from onMounted. */
 export function onMounted(fn: () => void): void {
   const c = current();
   c.host.hooks.mounted = chain(c.host.hooks.mounted, fn);

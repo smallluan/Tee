@@ -8,5 +8,6 @@
     "rootDir": "src/tee",
     "types": []
   },
-  "include": ["src/tee/**/*.ts"]
+  "include": ["src/tee/**/*.ts"],
+  "exclude": ["src/tee/tee-lsp.ts", "src/tee/tee-virtual.ts"]
 }

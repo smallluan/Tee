@@ -1,13 +1,15 @@
 {
   "name": "tee-language",
   "displayName": "Tee",
-  "description": "Syntax highlighting and completions for Tee `.tee` single-file components.",
-  "version": "0.6.0",
+  "description": "Language support for Tee `.tee` single-file components: TypeScript in <script>, expressions in {{ }} and t-* directives.",
+  "version": "0.8.3",
   "publisher": "tee",
   "engines": {
     "vscode": "^1.80.0"
   },
   "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:tee"],
+  "main": "./extension.cjs",
   "contributes": {
     "languages": [
       {
@@ -31,7 +33,6 @@
           "text.html.tee": "html"
         }
       }
-    ],
-    "html.customData": ["./tee.html-data.json"]
+    ]
   }
 }

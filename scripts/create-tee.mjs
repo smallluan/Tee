@@ -46,4 +46,8 @@ console.log(`
     cd ${name}
     npm install
     npm run dev
+
+  Editor (one-time): Command Palette → Developer: Install Extension from Location…
+  → node_modules/tee-framework/editor/vscode-tee
+  then reload, so .tee files get TypeScript + {{ }} / t-* highlighting.
 `);
