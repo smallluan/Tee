@@ -555,7 +555,7 @@ export function For<T>(props: {
     item: "item",
     index: "$index",
     key,
-    render: (_ctx, item, index) => props.children(item as T, index),
+    render: (inner, item, index) => withView(inner, () => props.children(item as T, index)),
   };
 }
 
