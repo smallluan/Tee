@@ -1,5 +1,13 @@
 # Pitfalls (read when something “feels like React/Vue”)
 
+## `self.view` used to do nothing
+
+Tee used to stash the setup return on `extras.view`, so `self.view = "home"` was a silent no-op. That slot is no longer a `self` field. `self.view` / `self.page` are yours. Names starting with `$` stay reserved (`$refs`, `$emit`, `$nextTick`).
+
+## `t-on:submit.prevent` used to break
+
+TypeScript JSX split the dotted name. Current Tee quotes it before emit. Prefer `t-on:submit.prevent={...}`. `e.preventDefault()` in the handler still works.
+
 ## `setup` ran once
 
 **Wrong:** expect the function to run again after `self.count++`.  

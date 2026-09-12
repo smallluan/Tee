@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { transformWithOxc, type Plugin } from "vite";
-import { compileTSX, isSFCSource } from "./jsx-transform";
+import { compileTSXWithMap, isSFCSource } from "./jsx-transform";
 import { compileSFC, parseSFC, hashScopeId, scopeCss } from "./sfc";
 
 /**
@@ -17,7 +17,13 @@ export function tee(): Plugin {
       if (query?.includes("tee&type=style")) return;
       if (!file.endsWith(".tee")) return;
       if (!isSFCSource(code)) {
-        return { code: compileTSX(code, file), map: null };
+        try {
+          return compileTSXWithMap(code, file);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.error(message);
+          return;
+        }
       }
       const js = compileSFC(code, file);
       const lang = parseSFC(code).scriptLang;

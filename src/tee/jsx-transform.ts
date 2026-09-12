@@ -10,7 +10,15 @@ export function isSFCSource(source: string): boolean {
  * Dynamic JSX values become getters so TwinMap can patch the real DOM.
  */
 export function compileTSX(source: string, fileName = "component.tee"): string {
-  const wrapped = wrapJsxExpressionsInSource(source, fileName);
+  return compileTSXWithMap(source, fileName).code;
+}
+
+export function compileTSXWithMap(
+  source: string,
+  fileName = "component.tee",
+): { code: string; map: object | null } {
+  const quoted = quoteDottedTeeAttrs(source);
+  const wrapped = wrapJsxExpressionsInSource(quoted, fileName);
   const result = ts.transpileModule(wrapped, {
     compilerOptions: {
       jsx: ts.JsxEmit.ReactJSX,
@@ -18,10 +26,25 @@ export function compileTSX(source: string, fileName = "component.tee"): string {
       target: ts.ScriptTarget.ES2020,
       module: ts.ModuleKind.ESNext,
       esModuleInterop: true,
+      sourceMap: true,
+      inlineSources: true,
     },
     fileName: asTsxName(fileName),
+    reportDiagnostics: true,
   });
-  return injectJsxHelpers(result.outputText, source);
+  const fatal = (result.diagnostics ?? []).filter(
+    (item) => item.category === ts.DiagnosticCategory.Error,
+  );
+  if (fatal.length) {
+    const text = fatal
+      .map((item) => ts.flattenDiagnosticMessageText(item.messageText, "\n"))
+      .join("\n");
+    throw new Error(`Tee compile ${fileName}:\n${text}`);
+  }
+  return {
+    code: injectJsxHelpers(result.outputText, quoted),
+    map: parseMap(result.sourceMapText, fileName),
+  };
 }
 
 const JSX_HELPERS = ["For", "Fragment"] as const;
@@ -59,6 +82,90 @@ function importBinds(emit: string, name: string): boolean {
 function asTsxName(fileName: string): string {
   if (fileName.endsWith(".tsx") || fileName.endsWith(".jsx")) return fileName;
   return fileName.replace(/\.tee$/i, ".tsx");
+}
+
+function parseMap(text: string | undefined, fileName: string): object | null {
+  if (!text) return null;
+  try {
+    const map = JSON.parse(text) as { file?: string; sources?: string[] };
+    map.file = fileName;
+    if (Array.isArray(map.sources) && map.sources.length) map.sources[0] = fileName;
+    return map;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * TypeScript JSX splits `t-on:submit.prevent` into `t-on:submit` + `prevent`.
+ * Quote the whole name before transpile so the runtime still sees modifiers.
+ */
+export function quoteDottedTeeAttrs(source: string): string {
+  const re = /\bt-(?:on:[A-Za-z][\w-]*|[A-Za-z][\w:]*)(?:\.[A-Za-z][\w]*)+/g;
+  let out = "";
+  let last = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(source))) {
+    if (!inJsxTag(source, match.index)) continue;
+    const name = match[0];
+    let i = match.index + name.length;
+    while (i < source.length && /\s/.test(source[i])) i += 1;
+    let end = match.index + name.length;
+    let value = "true";
+    if (source[i] === "=") {
+      i += 1;
+      while (i < source.length && /\s/.test(source[i])) i += 1;
+      const init = readJsxInitializer(source, i);
+      if (!init) continue;
+      value = init.value;
+      end = init.end;
+    }
+    out += `${source.slice(last, match.index)}{...{ ${JSON.stringify(name)}: ${value} }}`;
+    last = end;
+    re.lastIndex = end;
+  }
+  return out + source.slice(last);
+}
+
+function inJsxTag(source: string, index: number): boolean {
+  for (let i = index; i >= 0; i -= 1) {
+    const char = source[i];
+    if (char === ">") return false;
+    if (char === "<") return true;
+  }
+  return false;
+}
+
+function readJsxInitializer(
+  source: string,
+  start: number,
+): { value: string; end: number } | null {
+  const open = source[start];
+  if (open === "{") {
+    let depth = 0;
+    for (let i = start; i < source.length; i += 1) {
+      const char = source[i];
+      if (char === "{") depth += 1;
+      else if (char === "}") {
+        depth -= 1;
+        if (depth === 0) return { value: source.slice(start + 1, i).trim() || "true", end: i + 1 };
+      }
+    }
+    return null;
+  }
+  if (open === '"' || open === "'") {
+    let i = start + 1;
+    while (i < source.length) {
+      if (source[i] === "\\") {
+        i += 2;
+        continue;
+      }
+      if (source[i] === open) return { value: source.slice(start, i + 1), end: i + 1 };
+      i += 1;
+    }
+    return null;
+  }
+  return null;
 }
 
 /**

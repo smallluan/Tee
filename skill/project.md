@@ -47,7 +47,7 @@ export default defineConfig({
 });
 ```
 
-`.tee` files compile as TSX unless they are a Vue-style SFC (`<template>` plus `<script>` or `<style>`).
+`.tee` files compile as TSX unless they are a Vue-style SFC (`<template>` plus `<script>` or `<style>`). The plugin attaches a source map back to the `.tee` file. Compile failures start with `Tee compile <file>:`.
 
 `tsconfig.json` should keep:
 

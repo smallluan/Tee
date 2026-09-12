@@ -219,7 +219,7 @@ export function runSetup(scope: Scope, fn: SetupFn): Ctx {
   try {
     const out = fn(c);
     if (isViewResult(out)) {
-      c.host.extras.view = out;
+      c.host.setupView = out;
     } else if (out && typeof out === "object" && !isRef(out) && !isComputed(out)) {
       applyReturn(c, out as Record<string, unknown>);
     }

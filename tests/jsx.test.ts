@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { compileTSX, isSFCSource } from "../src/tee/jsx-transform";
+import { compileTSX, compileTSXWithMap, isSFCSource } from "../src/tee/jsx-transform";
 import { mount, tick } from "./helpers";
 import { setup, computed } from "../src/tee/chart";
 import { jsx, Fragment, For } from "../src/tee/jsx";
@@ -57,6 +57,36 @@ export default setup(function App(self) {
     );
     expect(js).toContain('import { setup, For } from "tee-framework"');
     expect(js.match(/\bFor\b/g)?.length).toBeGreaterThan(1);
+  });
+
+  it("keeps t-on and t-model modifiers as one attribute name", () => {
+    const js = compileTSX(
+      `import { setup } from "tee-framework";
+export default setup(function App(self) {
+  return (
+    <form t-on:submit.prevent={() => self.save()}>
+      <input t-model.trim="guest" />
+      <a t-on:click.prevent.stop={() => self.go()}>go</a>
+    </form>
+  );
+});`,
+      "App.tee",
+    );
+    expect(js).toContain('"t-on:submit.prevent"');
+    expect(js).toContain('"t-model.trim"');
+    expect(js).toContain('"t-on:click.prevent.stop"');
+    expect(js).not.toMatch(/"t-on:submit":\s*true/);
+    expect(js).not.toMatch(/\bprevent:\s*\(\)\s*=>/);
+  });
+
+  it("emits a source map that points at the .tee file", () => {
+    const { map } = compileTSXWithMap(
+      `export default setup((self) => {
+  return <p>{self.title}</p>;
+});`,
+      "src/App.tee",
+    );
+    expect(map).toMatchObject({ file: "src/App.tee" });
   });
 
   it("compiles the starter App.tee without eating children or handlers", () => {
@@ -156,5 +186,47 @@ describe("setup returns DOM", () => {
     ];
     await tick(app);
     expect([...host.querySelectorAll("li")].map((el) => el.textContent)).toEqual(["岩茶", "铁观音"]);
+  });
+
+  it("lets self.view be user state, not the setup return slot", async () => {
+    const { app, host } = mount({
+      ...setup((self) => {
+        self.view = "a";
+        return jsx("main", {
+          children: [
+            jsx("p", { "t-if": () => self.view === "a", children: "page-a" }),
+            jsx("p", { "t-else": true, children: "page-b" }),
+            jsx("button", {
+              "t-on:click": () => {
+                self.view = "b";
+              },
+              children: "go",
+            }),
+          ],
+        });
+      }),
+    });
+    expect(host.textContent).toContain("page-a");
+    host.querySelector("button")!.dispatchEvent(new Event("click"));
+    await tick(app);
+    expect(host.textContent).toContain("page-b");
+  });
+
+  it("honors t-on:submit.prevent on the real node", async () => {
+    const { host } = mount({
+      ...setup((self) => {
+        self.saved = false;
+        return jsx("form", {
+          "t-on:submit.prevent": () => {
+            self.saved = true;
+          },
+          children: jsx("button", { type: "submit", children: "ok" }),
+        });
+      }),
+    });
+    const form = host.querySelector("form")!;
+    const event = new Event("submit", { bubbles: true, cancelable: true });
+    form.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
   });
 });

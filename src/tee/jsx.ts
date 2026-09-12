@@ -195,7 +195,7 @@ function mountTagDef(def: TagDef, props: Record<string, unknown>, children: unkn
   const out = withView(innerCtx, () => {
     if (def.setup) runSetup(innerScope, def.setup);
     const holder = document.createDocumentFragment();
-    const view = inst.extras.view;
+    const view = inst.setupView;
     if (view != null) mountView(holder, view, innerCtx);
     else if (def.render) def.render(innerCtx, holder);
     else if (def.template) mountTemplate(def.template, holder, innerScope, innerCtx);

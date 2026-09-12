@@ -21,7 +21,7 @@ export { define } from "./registry";
 
 let currentApp: TeeApp | null = null;
 
-export const version = "0.9.6";
+export const version = "0.9.7";
 
 export function nextTick(fn?: () => void): Promise<void> {
   const p = currentApp ? currentApp.tick() : Promise.resolve();
@@ -69,7 +69,7 @@ export class TeeApp {
       lookup: (tag) => tags[tag] ?? lookupTag(tag),
       scope: this.scope,
     };
-    const view = this.instance.extras.view;
+    const view = this.instance.setupView;
     if (view != null) mountView(host, view, ctx);
     else if (options.render) options.render(ctx, host);
     else mountTemplate(html, host, this.scope, ctx);

@@ -51,6 +51,8 @@ export default setup(function CountChip(self) {
 });
 ```
 
+`self.view` is a normal field (page name, etc.). It is not reserved.
+
 ## Do not
 
 - Treat `self` as React props + state split.

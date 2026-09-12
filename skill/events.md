@@ -36,6 +36,8 @@ CamelCase `onClick` is accepted and lowercased (`click`). **`onDoubleClick` beco
 <form t-on:submit.prevent={() => self.save()}>
 ```
 
+Write the dotted name as one attribute. Tee rewrites it before TypeScript (TSX would otherwise split `t-on:submit` and `prevent`). `t-model.trim` is the same. Colon form `t-model:trim` also works.
+
 ## Child → parent
 
 Child: `self.$emit("save", payload)`.

@@ -15,6 +15,8 @@ export class Instance {
   scope: Scope | null = null;
   detached = false;
   extras: Record<string, unknown>;
+  /** DOM returned from setup(). Not a field on `self` — `self.view` is yours. */
+  setupView: unknown = null;
   hooks: { mounted?: () => void; updated?: () => void; unmounted?: () => void };
   private childSet: Set<Instance> | null = null;
 
