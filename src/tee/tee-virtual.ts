@@ -1,8 +1,7 @@
 /**
- * Editor support for `.tee` SFCs: split blocks, keep script offsets, and
- * pull template expressions / `self` bindings for TypeScript IntelliSense.
- * Highlighting still comes from the TextMate grammar; this file is the
- * language-service half.
+ * Editor support for `.tee` files.
+ * TSX modules are the whole file (grammar = source.tsx).
+ * Vue-style SFCs still split template / script / style for IntelliSense.
  */
 
 export interface BlockRange {
@@ -458,6 +457,7 @@ export function declaredNames(script: string): Set<string> {
 /** Offset-preserving virtual TS: script + template expressions stay, everything else is space. */
 export function virtualizeTee(source: string): { text: string; script?: BlockRange; template?: BlockRange } {
   const blocks = parseSFCBlocks(source);
+  if (!blocks.length) return { text: source };
   const chars = new Array<string>(source.length);
   for (let i = 0; i < source.length; i++) {
     const ch = source[i];
@@ -496,7 +496,7 @@ export function locateTee(source: string, offset: number): TeeLocation {
     if (inStartTag(source, block.contentStart, block.contentEnd, offset)) return { kind: "tag" };
     return { kind: "template" };
   }
-  return { kind: "outside" };
+  return blocks.length ? { kind: "outside" } : { kind: "script" };
 }
 
 function inStartTag(source: string, from: number, to: number, offset: number): boolean {
@@ -521,6 +521,7 @@ function inStartTag(source: string, from: number, to: number, offset: number): b
 
 export function collectComponentBindings(source: string): Binding[] {
   const blocks = parseSFCBlocks(source);
+  if (!blocks.length) return extractBindings(source);
   const script = blocks.find((b) => b.tag === "script");
   const template = blocks.find((b) => b.tag === "template");
   const map = new Map<string, string>();

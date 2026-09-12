@@ -21,34 +21,28 @@ Tee 不用虚拟 DOM。**数据路径和真实 DOM 站点之间有一张双向�
 
 `setup` / `computed` / `watch` / `onMounted` / `ref` 你已经会写。Tee 不发明 hold、derive、trail、act、weave。差别是这三件事：
 
-1. **脚本和模板共用同一份对象。** `self.count` 就是 `{{ count }}`。不是 setup 返回一包 ref，再靠编译解开 `.value`。
-2. **组合是普通函数往这份对象上写字段。** 不是返回一包 ref 再 merge。把对象传进去，或在 `setup()` 期间调用 `watch()` / `onMounted()`，和已经习惯的写法一样。
-3. **更新是映射表上的站点，不是函数组件再跑一遍。** Options API（`data` / `computed` / `methods`）填的也是同一份对象。
+1. **脚本和视图共用同一份对象。** `self.count` 就是 `{self.count}`。不是 setup 返回一包 ref，再靠编译解开 `.value`。
+2. **`setup` 可以返回真实 DOM（TSX）。** 函数只跑一次，表达式变成 TwinMap 站点。没有组件重渲染。
+3. **样式不写在组件里。** `import "./App.less"`，和 React 一样从外面引进来。
+4. **组合是普通函数往这份对象上写字段。** 更新是映射表上的站点，不是函数再跑一遍。
 
-```ts
-import { setup, computed, watch, onMounted } from "tee-framework";
+```tsx
+import { setup, computed } from "tee-framework";
+import "./App.less";
 
 export default setup((self) => {
   self.n = 0;
   self.label = computed(() => `×${Number(self.n) * 2}`);
-  self.bump = () => {
-    self.n = Number(self.n) + 1;
-  };
-  watch(
-    () => self.n,
-    (n) => {
-      document.title = String(n);
-    },
+
+  return (
+    <button t-on:click={() => (self.n = Number(self.n) + 1)}>
+      {self.label}
+    </button>
   );
-  onMounted(() => {
-    /* DOM 已经链进映射表 */
-  });
 });
 ```
 
-```html
-<button t-on:click="bump">{{ label }}</button>
-```
+`.tee` 按 TSX 高亮。旧的 `<template>` / `<script>` / `<style>` SFC 仍然能编。
 
 可复用逻辑是普通函数，参数就是这份对象：
 
@@ -145,14 +139,14 @@ npm test
 | DOM `ref` | `t-ref` → `$refs` |
 | `provide` / `inject` | 同名 |
 | 插槽 | `<slot>` / `t-slot` |
-| `.vue` + Less scoped | `.tee` + `lang="less"` scoped |
+| `.vue` + Less scoped | `.tee` TSX + `import "./App.less"` |
 | `setup` / `computed` / `watch` / `onMounted` / `ref` | 同名。合同不同：写在 `self` 上的名字就是模板名 |
 
-编辑器：安装 `editor/tee-language.vsix`。不装的话 `.tee` 是纯文本。图标是墨色底上的金色 T。
+编辑器：安装 `editor/tee-language.vsix`。不装的话 `.tee` 是纯文本。图标是墨色底上的金色 T。`.tee` 按 TSX 高亮。
 
-## `.tee` 单文件组件
+## `.tee` 模块
 
-构建期拆成三块，浏览器只拿到 JS / CSS：
+默认写法是 TSX：`setup` 返回真实 DOM，样式外部引入。旧的 `<template>` / `<script>` / `<style>` SFC 仍然能编：
 
 ```tee
 <template>
@@ -201,7 +195,7 @@ Tee.create({ el: "#app", ...App });
 2. 选 `editor/tee-language.vsix`（脚手架项目里是 `.vscode/tee-language.vsix`）
 3. Reload，状态栏语言为 **Tee**，标签页图标为金色 T
 
-扩展会高亮插值和 `t-*`，并补全 `tee-framework` 的 `setup` / `computed` 以及模板里的字段。
+扩展把整个 `.tee` 当 TSX 高亮，并补全 `tee-framework` 的 `setup` / `computed` 以及 `self` 上的字段。
 
 `src/vite-env.d.ts` 给 `import App from "./App.tee"` 提供模块类型。
 
@@ -238,6 +232,7 @@ src/tee/ir.ts        表达式 IR
 src/tee/html.ts      模板 HTML → AST
 src/tee/codegen.ts   .tee → DOM 工厂
 src/tee/sfc.ts       单文件拆块
+src/tee/jsx.ts       TSX 运行时（setup 返回真实 DOM）
 src/tee/plugin.ts    Vite 插件
 src/tee/compile.ts   挂载
 src/tee/engine.ts    按等级冲洗

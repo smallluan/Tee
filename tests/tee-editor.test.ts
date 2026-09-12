@@ -93,6 +93,23 @@ describe("tee virtual document", () => {
     ]);
   });
 
+  it("treats a TSX .tee file as one script and reads self fields", () => {
+    const tsx = `import { setup, computed } from "tee-framework";
+import "./App.less";
+
+export default setup((self) => {
+  self.guest = "";
+  self.count = 0;
+  self.doubled = computed(() => Number(self.count) * 2);
+  return <h1>{self.guest}</h1>;
+});
+`;
+    expect(parseSFCBlocks(tsx)).toEqual([]);
+    expect(locateTee(tsx, tsx.indexOf("self.count")).kind).toBe("script");
+    const names = collectComponentBindings(tsx).map((b) => b.name);
+    expect(names).toEqual(expect.arrayContaining(["guest", "count", "doubled", "$refs"]));
+  });
+
   it("pulls self fields, options data, computed, and methods", () => {
     const setupNames = collectComponentBindings(setupSfc).map((b) => b.name);
     expect(setupNames).toEqual(expect.arrayContaining(["guest", "count", "bump", "label", "$refs", "$emit"]));

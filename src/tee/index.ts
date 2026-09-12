@@ -23,3 +23,6 @@ export { mountAST, mountTemplate, rt } from "./compile";
 export type { CompileContext } from "./compile";
 export { parseSFC, compileSFC, scopeCss, hashScopeId } from "./sfc";
 export { generateRenderBody } from "./codegen";
+export { jsx, jsxs, jsxDEV, Fragment, For, mountView } from "./jsx";
+export type { JSX, TeeView, TeeChild } from "./jsx";
+export { compileTSX, isSFCSource } from "./jsx-transform";

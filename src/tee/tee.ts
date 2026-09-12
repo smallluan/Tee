@@ -1,4 +1,5 @@
 import { mountTemplate, applyInject, applyProvide, type CompileContext } from "./compile";
+import { mountView, jsx, Fragment, For } from "./jsx";
 import { Engine } from "./engine";
 import { Instance } from "./instance";
 import {
@@ -18,7 +19,7 @@ import type { MapSnapshot, TagDef, TeeOptions, TeePlugin } from "./types";
 const registry = new Map<string, TagDef>();
 let currentApp: TeeApp | null = null;
 
-export const version = "0.8.9";
+export const version = "0.9.0";
 
 export function define(name: string, def: TagDef): TagDef {
   registry.set(name.toLowerCase(), def);
@@ -71,7 +72,9 @@ export class TeeApp {
       lookup: (tag) => tags[tag] ?? registry.get(tag),
       scope: this.scope,
     };
-    if (options.render) options.render(ctx, host);
+    const view = this.instance.extras.view;
+    if (view != null) mountView(host, view, ctx);
+    else if (options.render) options.render(ctx, host);
     else mountTemplate(html, host, this.scope, ctx);
     host.removeAttribute("t-cloak");
     this.el = host;
@@ -160,4 +163,7 @@ export const Tee = {
   onMounted,
   onUnmounted,
   current,
+  jsx,
+  Fragment,
+  For,
 };

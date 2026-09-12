@@ -11,7 +11,7 @@ const name = process.argv[2];
 if (!name || name.startsWith("-")) {
   console.log(`Usage: create-tee <project-dir>
 
-Scaffold a Tee app (Vite + .tee SFCs), the same shape as npm create vite.
+Scaffold a Tee app (Vite + .tee TSX modules), the same shape as npm create vite.
 
   npm create tee my-app
   npx create-tee my-app

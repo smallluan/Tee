@@ -1,8 +1,8 @@
 {
   "name": "tee-language",
   "displayName": "Tee",
-  "description": "Syntax, IntelliSense, and file icon for Tee `.tee` single-file components.",
-  "version": "0.8.9",
+  "description": "TSX highlighting, IntelliSense, and file icon for Tee `.tee` modules.",
+  "version": "0.9.0",
   "publisher": "tee",
   "icon": "icons/tee.png",
   "engines": {
@@ -30,12 +30,8 @@
         "scopeName": "source.tee",
         "path": "./syntaxes/tee.tmLanguage.json",
         "embeddedLanguages": {
-          "source.ts": "typescript",
-          "source.js": "javascript",
-          "source.css": "css",
-          "source.css.less": "less",
-          "source.css.scss": "scss",
-          "text.html.tee": "html"
+          "source.tsx": "typescriptreact",
+          "source.ts": "typescript"
         }
       }
     ],
@@ -58,7 +54,7 @@
         "editor.wordBasedSuggestions": "off"
       },
       "emmet.includeLanguages": {
-        "tee": "html"
+        "tee": "typescriptreact"
       }
     }
   }

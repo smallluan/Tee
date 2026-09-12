@@ -1,7 +1,7 @@
 {
   "name": "create-tee",
-  "version": "0.8.9",
-  "description": "Scaffold a Tee app (Vite + .tee SFCs).",
+  "version": "0.9.0",
+  "description": "Scaffold a Tee app (Vite + .tee TSX modules).",
   "type": "module",
   "bin": {
     "create-tee": "./index.mjs"
@@ -20,6 +20,6 @@
     "access": "public"
   },
   "dependencies": {
-    "tee-framework": "^0.8.9"
+    "tee-framework": "^0.9.0"
   }
 }

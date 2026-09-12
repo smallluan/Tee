@@ -7,6 +7,8 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "tee-framework",
     "isolatedModules": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
@@ -15,7 +17,9 @@
       "*": ["./*"],
       "tee": ["./src/tee/index.ts"],
       "tee-framework": ["./src/tee/index.ts"],
-      "tee-framework/plugin": ["./src/tee/plugin.ts"]
+      "tee-framework/plugin": ["./src/tee/plugin.ts"],
+      "tee-framework/jsx-runtime": ["./src/tee/jsx-runtime.ts"],
+      "tee-framework/jsx-dev-runtime": ["./src/tee/jsx-dev-runtime.ts"]
     },
     "types": ["vite/client"]
   },

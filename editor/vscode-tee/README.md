@@ -19,7 +19,8 @@ npx tee-editor
 
 ## 会得到什么
 
-- 模板 / 脚本 / Less 高亮；`{{ }}` 和 `t-if="…"` 是表达式，不是字符串
+- 整个 `.tee` 按 TSX 高亮（`source.tsx`），不是自制的 HTML / Less 嵌入
+- 样式写在旁边的 `.less` / `.css`，不要写进组件文件
 - `import { setup, computed } from "tee-framework"` 补全
-- 模板里补全 `self` 上的字段和 `t-*` 指令
+- `self` 字段和 `t-*` 指令补全
 - 专用 `.tee` 文件图标

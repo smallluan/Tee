@@ -193,6 +193,16 @@ function isComputed(value: unknown): value is ComputedBox<unknown> {
   return Boolean(value && typeof value === "object" && (value as ComputedBox<unknown>).__tee === "computed");
 }
 
+function isViewResult(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof Node !== "undefined" && value instanceof Node) return true;
+  if (Array.isArray(value)) return true;
+  if (typeof value === "object") {
+    return Object.getOwnPropertySymbols(value).some((symbol) => String(symbol) === "Symbol(tee-view)");
+  }
+  return false;
+}
+
 function chain(prev: (() => void) | undefined, next: () => void): () => void {
   return prev
     ? () => {
@@ -207,7 +217,9 @@ export function runSetup(scope: Scope, fn: SetupFn): Ctx {
   stack.push(c);
   try {
     const out = fn(c);
-    if (out && typeof out === "object" && !isRef(out) && !isComputed(out)) {
+    if (isViewResult(out)) {
+      c.host.extras.view = out;
+    } else if (out && typeof out === "object" && !isRef(out) && !isComputed(out)) {
       applyReturn(c, out as Record<string, unknown>);
     }
     return c;
@@ -216,7 +228,7 @@ export function runSetup(scope: Scope, fn: SetupFn): Ctx {
   }
 }
 
-export type SetupFn = (self: Self) => void | Record<string, unknown>;
+export type SetupFn = (self: Self) => void | Record<string, unknown> | unknown;
 
 export interface SetupDef extends Omit<TagDef, "setup"> {
   setup: SetupFn;

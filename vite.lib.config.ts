@@ -17,12 +17,14 @@ export default defineConfig({
       entry: {
         index: resolve(root, "src/tee/index.ts"),
         plugin: resolve(root, "src/tee/plugin.ts"),
+        "jsx-runtime": resolve(root, "src/tee/jsx-runtime.ts"),
+        "jsx-dev-runtime": resolve(root, "src/tee/jsx-dev-runtime.ts"),
       },
       formats: ["es"],
       fileName: (_format, name) => `${name}.js`,
     },
     rollupOptions: {
-      external: [/^node:/, "vite", "less"],
+      external: [/^node:/, "vite", "less", "typescript", "tee-typescript"],
     },
   },
 });

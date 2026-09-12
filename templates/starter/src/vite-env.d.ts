@@ -2,6 +2,6 @@
 
 declare module "*.tee" {
   import type { TagDef, TeeOptions } from "tee-framework";
-  const sfc: TagDef & TeeOptions;
-  export default sfc;
+  const mod: TagDef & TeeOptions;
+  export default mod;
 }

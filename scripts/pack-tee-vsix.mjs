@@ -16,7 +16,7 @@ const manifest = `<?xml version="1.0" encoding="utf-8"?>
     <Identity Language="en-US" Id="${pkg.name}" Version="${pkg.version}" Publisher="${pkg.publisher}"/>
     <DisplayName>${pkg.displayName}</DisplayName>
     <Description xml:space="preserve">${escapeXml(pkg.description)}</Description>
-    <Tags>tee,sfc,tee-framework</Tags>
+    <Tags>tee,tsx,tee-framework</Tags>
     <Categories>Programming Languages</Categories>
     <Icon>extension/icons/tee.png</Icon>
   </Metadata>

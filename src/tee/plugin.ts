@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { transformWithOxc, type Plugin } from "vite";
+import { compileTSX, isSFCSource } from "./jsx-transform";
 import { compileSFC, parseSFC, hashScopeId, scopeCss } from "./sfc";
 
 /**
- * Vite plugin for `.tee` single-file components.
- * Same idea as Vue's `.vue`: intercept the file at build time, split blocks,
- * compile the template to an AST factory, then emit a JS module.
- * `<style lang="less">` / `scss` / `sass` go through Vite's CSS pipeline.
+ * Vite plugin for `.tee` files.
+ * TSX (setup returns DOM, styles imported) is the default.
+ * Vue-style `<template>` / `<script>` / `<style>` SFCs still compile.
  */
 export function tee(): Plugin {
   return {
@@ -16,6 +16,9 @@ export function tee(): Plugin {
       const [file, query] = id.split("?");
       if (query?.includes("tee&type=style")) return;
       if (!file.endsWith(".tee")) return;
+      if (!isSFCSource(code)) {
+        return { code: compileTSX(code, file), map: null };
+      }
       const js = compileSFC(code, file);
       const lang = parseSFC(code).scriptLang;
       if (lang === "ts") {

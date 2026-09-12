@@ -108,6 +108,8 @@ export class TeeLanguageProject {
       esModuleInterop: true,
       resolveJsonModule: true,
       isolatedModules: true,
+      jsx: ts.JsxEmit.ReactJSX,
+      jsxImportSource: "tee-framework",
     };
     let rootFiles: string[] = [];
     if (configPath) {
@@ -225,24 +227,22 @@ export class TeeLanguageProject {
     const blocks = parseSFCBlocks(doc.text);
     const script = blocks.find((block) => block.tag === "script");
     const output: TeeDiagnostic[] = [];
-    if (script) {
-      const name = virtualName(doc.fileName);
-      const diagnostics = [
-        ...this.service.getSyntacticDiagnostics(name),
-        ...this.service.getSemanticDiagnostics(name),
-      ];
-      for (const diagnostic of diagnostics) {
-        const start = diagnostic.start ?? 0;
-        const end = start + (diagnostic.length ?? 1);
-        if (start < script.contentStart || start > script.contentEnd) continue;
-        output.push({
-          message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
-          start,
-          end,
-          severity: diagnostic.category === ts.DiagnosticCategory.Error ? "error" : "warning",
-          source: "tee-typescript",
-        });
-      }
+    const name = virtualName(doc.fileName);
+    const diagnostics = [
+      ...this.service.getSyntacticDiagnostics(name),
+      ...this.service.getSemanticDiagnostics(name),
+    ];
+    for (const diagnostic of diagnostics) {
+      const start = diagnostic.start ?? 0;
+      const end = start + (diagnostic.length ?? 1);
+      if (script && (start < script.contentStart || start > script.contentEnd)) continue;
+      output.push({
+        message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+        start,
+        end,
+        severity: diagnostic.category === ts.DiagnosticCategory.Error ? "error" : "warning",
+        source: "tee-typescript",
+      });
     }
     output.push(...styleDiagnostics(doc));
     return output;
@@ -255,7 +255,7 @@ export class TeeLanguageProject {
   private readFile(fileName: string): string | undefined {
     const name = normalize(fileName);
     if (name === this.helperName) return this.helperText || undefined;
-    if (name.endsWith(".tee.ts")) {
+    if (name.endsWith(".tee.ts") || name.endsWith(".tee.tsx")) {
       const source = sourceName(name);
       const doc = this.docs.get(source);
       return doc ? virtualScript(doc.text) : undefined;
@@ -333,19 +333,18 @@ export function createTeeLanguageProject(root: string, editorRoot?: string): Tee
 }
 
 function virtualName(fileName: string): string {
-  return normalize(`${fileName}.ts`);
+  return normalize(`${fileName}.tsx`);
 }
 
 function sourceName(fileName: string): string {
-  return normalize(fileName.endsWith(".tee.ts") ? fileName.slice(0, -3) : fileName);
+  return normalize(fileName.endsWith(".tee.tsx") ? fileName.slice(0, -4) : fileName.endsWith(".tee.ts") ? fileName.slice(0, -3) : fileName);
 }
 
 function virtualScript(source: string): string {
-  const chars: string[] = [...source].map((char) => (char === "\n" || char === "\r" ? char : " "));
   const block = parseSFCBlocks(source).find((item) => item.tag === "script");
-  if (block) {
-    for (let i = block.contentStart; i < block.contentEnd; i += 1) chars[i] = source[i];
-  }
+  if (!block) return source;
+  const chars: string[] = [...source].map((char) => (char === "\n" || char === "\r" ? char : " "));
+  for (let i = block.contentStart; i < block.contentEnd; i += 1) chars[i] = source[i];
   return chars.join("");
 }
 

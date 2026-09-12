@@ -1,22 +1,22 @@
 {
   "tee-if": {
     "prefix": "t-if",
-    "body": "t-if=\"$1\"",
+    "body": "t-if={$1}",
     "description": "Conditionally mount this node."
   },
   "tee-else-if": {
     "prefix": "t-else-if",
-    "body": "t-else-if=\"$1\"",
+    "body": "t-else-if={$1}",
     "description": "Else-if branch of a t-if chain."
   },
   "tee-repeat": {
     "prefix": "t-repeat",
-    "body": "t-repeat=\"$1 in $2\"",
-    "description": "Repeat this node."
+    "body": "t-repeat={$1}",
+    "description": "Repeat this node from a list getter."
   },
   "tee-on-click": {
     "prefix": "t-on:click",
-    "body": "t-on:click=\"$1\"",
+    "body": "t-on:click={() => $1}",
     "description": "Click handler."
   },
   "tee-model": {
@@ -28,11 +28,15 @@
     "prefix": "setup",
     "body": [
       "import { setup, computed } from \"tee-framework\";",
+      "import \"./$1.less\";",
       "",
       "export default setup((self) => {",
       "  $0",
+      "  return (",
+      "    <main></main>",
+      "  );",
       "});"
     ],
-    "description": "Tee setup() entry."
+    "description": "Tee setup() that returns real DOM."
   }
 }
