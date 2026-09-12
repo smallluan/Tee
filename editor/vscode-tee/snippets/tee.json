@@ -19,6 +19,26 @@
     "body": "t-on:click={() => $1}",
     "description": "Click handler."
   },
+  "tee-on-input": {
+    "prefix": "t-on:input",
+    "body": "t-on:input={(e) => $1}",
+    "description": "Input handler."
+  },
+  "tee-on-compositionend": {
+    "prefix": "t-on:compositionend",
+    "body": "t-on:compositionend={(e) => $1}",
+    "description": "IME composition end."
+  },
+  "tee-on-dblclick": {
+    "prefix": "t-on:dblclick",
+    "body": "t-on:dblclick={() => $1}",
+    "description": "Double-click handler."
+  },
+  "tee-on-dragstart": {
+    "prefix": "t-on:dragstart",
+    "body": "t-on:dragstart={(e) => $1}",
+    "description": "Drag start handler."
+  },
   "tee-model": {
     "prefix": "t-model",
     "body": "t-model=\"$1\"",

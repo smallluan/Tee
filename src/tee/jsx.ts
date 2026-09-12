@@ -612,10 +612,60 @@ function bindGetter(
   return site;
 }
 
+type TeeHandler<E> = ((event: E) => void) | string;
+
+type TeeOnEvents = {
+  [K in keyof HTMLElementEventMap as `t-on:${K}`]?: TeeHandler<HTMLElementEventMap[K]>;
+} & {
+  [K in keyof HTMLElementEventMap as `on${Capitalize<string & K>}`]?: TeeHandler<HTMLElementEventMap[K]>;
+};
+
+export interface TeeAttributes extends TeeOnEvents {
+  children?: TeeChild;
+  class?: unknown;
+  className?: unknown;
+  id?: unknown;
+  style?: unknown;
+  title?: unknown;
+  name?: unknown;
+  type?: unknown;
+  value?: unknown;
+  checked?: unknown;
+  disabled?: unknown;
+  placeholder?: unknown;
+  href?: unknown;
+  src?: unknown;
+  alt?: unknown;
+  role?: unknown;
+  tabindex?: unknown;
+  "t-if"?: unknown;
+  "t-else-if"?: unknown;
+  "t-else"?: unknown;
+  "t-show"?: unknown;
+  "t-repeat"?: unknown;
+  "t-for"?: unknown;
+  "t-key"?: unknown;
+  "t-model"?: unknown;
+  "t-model:trim"?: unknown;
+  "t-model:number"?: unknown;
+  "t-model:lazy"?: unknown;
+  "t-model.trim"?: unknown;
+  "t-model.number"?: unknown;
+  "t-model.lazy"?: unknown;
+  "t-ref"?: unknown;
+  "t-html"?: unknown;
+  "t-text"?: unknown;
+  [attr: string]: unknown;
+}
+
 export namespace JSX {
   export type Element = TeeView;
   export interface ElementChildrenAttribute {
     children: TeeChild;
   }
-  export type IntrinsicElements = Record<string, Record<string, unknown>>;
+  export type IntrinsicElements = {
+    [K in keyof HTMLElementTagNameMap]: TeeAttributes;
+  } & {
+    [elem: string]: TeeAttributes;
+  };
 }

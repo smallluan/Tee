@@ -15,8 +15,11 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import {
   TEE_DIRECTIVES,
   TEE_NAMED_EXPORTS,
+  attributePrefix,
   collectComponentBindings,
+  directiveInsert,
   identAt,
+  inOpenTag,
   inTeeNamedImport,
   locateTee,
   parseSFCBlocks,
@@ -279,6 +282,18 @@ export class TeeLanguageProject {
     }
     const before = source.slice(Math.max(0, offset - 8), offset);
     if (/\b(?:self|this)\.$/.test(before)) return unique([...native, ...bindingCompletions(source)]);
+    if (inOpenTag(source, offset)) {
+      const tsx = !parseSFCBlocks(source).length;
+      const prefix = attributePrefix(source, offset);
+      const directives = TEE_DIRECTIVES.filter((item) => !prefix || item.name.startsWith(prefix)).map((item) => ({
+        name: item.name,
+        kind: "property",
+        detail: item.detail,
+        insertText: directiveInsert(item.name, tsx),
+        snippet: true,
+      }));
+      return unique([...native, ...directives]);
+    }
     return native;
   }
 

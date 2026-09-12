@@ -40,6 +40,96 @@ const SELF_API: Binding[] = [
   { name: "$nextTick", type: "(fn?: () => void) => Promise<void>" },
 ];
 
+/** Native DOM events. `t-on:${name}` binds addEventListener(name). */
+export const TEE_DOM_EVENTS = [
+  "abort",
+  "animationend",
+  "animationiteration",
+  "animationstart",
+  "auxclick",
+  "beforeinput",
+  "blur",
+  "canplay",
+  "canplaythrough",
+  "change",
+  "click",
+  "close",
+  "compositionend",
+  "compositionstart",
+  "compositionupdate",
+  "contextmenu",
+  "copy",
+  "cut",
+  "dblclick",
+  "drag",
+  "dragend",
+  "dragenter",
+  "dragleave",
+  "dragover",
+  "dragstart",
+  "drop",
+  "durationchange",
+  "ended",
+  "error",
+  "focus",
+  "focusin",
+  "focusout",
+  "input",
+  "invalid",
+  "keydown",
+  "keypress",
+  "keyup",
+  "load",
+  "loadeddata",
+  "loadedmetadata",
+  "loadstart",
+  "mousedown",
+  "mouseenter",
+  "mouseleave",
+  "mousemove",
+  "mouseout",
+  "mouseover",
+  "mouseup",
+  "paste",
+  "pause",
+  "play",
+  "playing",
+  "pointercancel",
+  "pointerdown",
+  "pointerenter",
+  "pointerleave",
+  "pointermove",
+  "pointerout",
+  "pointerover",
+  "pointerup",
+  "progress",
+  "ratechange",
+  "reset",
+  "resize",
+  "scroll",
+  "scrollend",
+  "seeked",
+  "seeking",
+  "select",
+  "stalled",
+  "submit",
+  "suspend",
+  "timeupdate",
+  "toggle",
+  "touchcancel",
+  "touchend",
+  "touchmove",
+  "touchstart",
+  "transitionend",
+  "transitionrun",
+  "transitionstart",
+  "volumechange",
+  "waiting",
+  "wheel",
+] as const;
+
+const BARE = new Set(["t-else", "t-pre", "t-once", "t-cloak"]);
+
 export const TEE_DIRECTIVES: Array<{ name: string; insert: string; detail: string }> = [
   { name: "t-if", insert: 't-if="$1"', detail: "Conditionally mount this node." },
   { name: "t-else-if", insert: 't-else-if="$1"', detail: "Else-if branch of a t-if chain." },
@@ -61,13 +151,37 @@ export const TEE_DIRECTIVES: Array<{ name: string; insert: string; detail: strin
   { name: "t-bind", insert: 't-bind="$1"', detail: "Spread an object of attributes." },
   { name: "t-bind:class", insert: 't-bind:class="$1"', detail: "Class binding: string, array, or { name: cond }." },
   { name: "t-bind:style", insert: 't-bind:style="$1"', detail: "Style binding: object of CSS properties." },
-  { name: "t-on:click", insert: 't-on:click="$1"', detail: "Click handler. Modifiers: .prevent .stop .once .self .capture" },
-  { name: "t-on:click.prevent", insert: 't-on:click.prevent="$1"', detail: "click + preventDefault." },
-  { name: "t-on:input", insert: 't-on:input="$1"', detail: "Input handler." },
-  { name: "t-on:submit", insert: 't-on:submit="$1"', detail: "Submit handler." },
-  { name: "t-on:submit.prevent", insert: 't-on:submit.prevent="$1"', detail: "submit + preventDefault." },
   { name: "t-slot", insert: 't-slot="$1"', detail: "Named slot filler on a custom tag." },
+  ...TEE_DOM_EVENTS.map((event) => ({
+    name: `t-on:${event}`,
+    insert: `t-on:${event}="$1"`,
+    detail: `Native ${event} event. Modifiers: .prevent .stop .once .self .capture`,
+  })),
+  { name: "t-on:click.prevent", insert: 't-on:click.prevent="$1"', detail: "click + preventDefault." },
+  { name: "t-on:submit.prevent", insert: 't-on:submit.prevent="$1"', detail: "submit + preventDefault." },
 ];
+
+export function directiveInsert(name: string, tsx: boolean): string {
+  if (BARE.has(name)) return name;
+  if (tsx) return `${name}={$1}`;
+  const found = TEE_DIRECTIVES.find((item) => item.name === name);
+  return found?.insert ?? `${name}="$1"`;
+}
+
+/** Cursor is inside an opening tag (`<input t-on:`), TSX or HTML. */
+export function inOpenTag(source: string, offset: number): boolean {
+  const start = source.lastIndexOf("<", offset);
+  if (start < 0) return false;
+  const chunk = source.slice(start, offset);
+  if (chunk.includes(">")) return false;
+  return /^<\/?[A-Za-z][\w:-]*(?:\s[\s\S]*)?$/.test(chunk);
+}
+
+export function attributePrefix(source: string, offset: number): string {
+  let start = offset;
+  while (start > 0 && /[\w:.-]/.test(source[start - 1])) start -= 1;
+  return source.slice(start, offset);
+}
 
 export function parseSFCBlocks(source: string): BlockRange[] {
   const blocks: BlockRange[] = [];

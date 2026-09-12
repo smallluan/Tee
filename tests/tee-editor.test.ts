@@ -189,4 +189,20 @@ const value = Math.
 
     project.dispose();
   });
+
+  it("completes native t-on: events in a TSX module", () => {
+    const tsx = `import { setup } from "tee-framework";
+export default setup(function App(self) {
+  return <input t-on:
+});
+`;
+    const project = createTeeLanguageProject(process.cwd());
+    const file = `${process.cwd()}/tests/fixtures/tsx-events.tee`;
+    project.upsert(file, tsx);
+    const names = project.completions(file, tsx.indexOf("t-on:") + "t-on:".length).map((item) => item.name);
+    expect(names).toEqual(
+      expect.arrayContaining(["t-on:input", "t-on:compositionend", "t-on:dblclick", "t-on:dragstart", "t-on:keydown"]),
+    );
+    project.dispose();
+  });
 });
