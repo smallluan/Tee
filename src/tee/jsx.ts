@@ -1,13 +1,14 @@
-import { current, type Self } from "./chart";
-import type { CompileContext } from "./compile";
+import { current, runSetup, type Self } from "./chart";
+import { applyInject, applyProvide, mountTemplate, type CompileContext } from "./compile";
 import { Engine } from "./engine";
 import { display, isBooleanAttr, writeText } from "./expr";
 import { Instance } from "./instance";
 import { touchList } from "./observe";
 import { runStmt } from "./expr";
-import type { Scope } from "./scope";
+import { lookupTag } from "./registry";
+import { createRootScope, type Scope } from "./scope";
 import { Rank, rankOf } from "./strata";
-import type { Site } from "./types";
+import type { Site, TagDef } from "./types";
 
 export type TeeView = Node | DocumentFragment | TeeChild[] | IfBranch | RepeatBranch;
 export type TeeChild = TeeView | string | number | boolean | null | undefined | (() => unknown);
@@ -53,13 +54,13 @@ function viewCtx(): CompileContext {
   return {
     engine: c.scope.$engine,
     instance: c.host,
-    lookup: () => undefined,
+    lookup: (tag) => lookupTag(tag),
     scope: c.scope,
   };
 }
 
 export function jsx(
-  type: string | ((props: Record<string, unknown>) => TeeView),
+  type: string | TagDef | ((props: Record<string, unknown>) => TeeView),
   props: Record<string, unknown> | null,
   _key?: unknown,
 ): TeeView {
@@ -70,6 +71,9 @@ export function jsx(
   }
   if (type === Fragment) {
     return flatten(children);
+  }
+  if (isTagDef(type)) {
+    return mountTagDef(type, rest, children);
   }
   return createElement(type, rest, children);
 }
@@ -116,10 +120,103 @@ function createElement(tag: string, props: Record<string, unknown>, children: un
       },
     };
   }
+  if (tag === "slot") {
+    return renderSlot(props, children, ctx);
+  }
+  const def = ctx.lookup(tag.toLowerCase()) ?? lookupTag(tag);
+  if (def) {
+    return mountTagDef(def, props, children);
+  }
   const el = document.createElement(tag);
   bindProps(el, props, ctx);
   appendChildren(el, flatten(children), ctx);
   return el;
+}
+
+function isTagDef(value: unknown): value is TagDef {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (value instanceof Node) return false;
+  if (VIEW in (value as object)) return false;
+  const rec = value as TagDef;
+  return typeof rec.setup === "function" || typeof rec.template === "string" || typeof rec.render === "function";
+}
+
+function renderSlot(props: Record<string, unknown>, children: unknown, ctx: CompileContext): TeeView {
+  const name = String(readOnce(props.name) ?? "default");
+  const fill = ctx.fillers?.[name];
+  if (fill?.length) return fill;
+  return flatten(children);
+}
+
+function mountTagDef(def: TagDef, props: Record<string, unknown>, children: unknown): TeeView {
+  const ctx = viewCtx();
+  const inst = ctx.instance.child();
+  const data: Record<string, unknown> = def.data ? { ...def.data() } : {};
+  const events: Array<[string, unknown]> = [];
+  const bound: Array<[string, () => unknown]> = [];
+  for (const [raw, value] of Object.entries(props)) {
+    if (value == null || raw === "children") continue;
+    const name = raw === "className" ? "class" : raw;
+    if (name.startsWith("t-on:") || /^on[A-Z]/.test(name)) {
+      events.push([eventName(name), value]);
+      continue;
+    }
+    if (typeof value === "function" && !isEventValue(value)) {
+      data[name] = (value as () => unknown)();
+      bound.push([name, value as () => unknown]);
+      continue;
+    }
+    data[name] = value;
+  }
+  for (const [event, value] of events) {
+    inst.listeners[event] = (payload: unknown) => {
+      if (typeof value === "function") value(payload);
+    };
+  }
+  applyInject(inst, def.inject, data);
+  const innerScope = createRootScope(ctx.engine, data, def.computed, def.methods, def.watch, inst);
+  inst.scope = innerScope;
+  applyProvide(inst, def.provide, innerScope);
+  def.created?.call(innerScope);
+  const slotHolder = document.createDocumentFragment();
+  appendChildren(slotHolder, flatten(children), ctx);
+  const fillers: Record<string, Node[]> = { default: [...slotHolder.childNodes] };
+  const innerCtx: CompileContext = {
+    ...ctx,
+    instance: inst,
+    scope: innerScope,
+    parentScope: ctx.scope,
+    fillers,
+    lookup: (tag) => ctx.lookup(tag) ?? lookupTag(tag),
+  };
+  const out = withView(innerCtx, () => {
+    if (def.setup) runSetup(innerScope, def.setup);
+    const holder = document.createDocumentFragment();
+    const view = inst.extras.view;
+    if (view != null) mountView(holder, view, innerCtx);
+    else if (def.render) def.render(innerCtx, holder);
+    else if (def.template) mountTemplate(def.template, holder, innerScope, innerCtx);
+    return holder;
+  });
+  for (const [name, get] of bound) {
+    bindGetter(innerCtx, "attr", out, `prop ${name}`, get, (value) => {
+      innerScope.$assign(name, value);
+    });
+  }
+  def.mounted?.call(innerScope);
+  inst.hooks.mounted?.();
+  inst.hooks.updated = chainHook(inst.hooks.updated, () => def.updated?.call(innerScope));
+  inst.hooks.unmounted = chainHook(inst.hooks.unmounted, () => def.unmounted?.call(innerScope));
+  return out;
+}
+
+function chainHook(prev: (() => void) | undefined, next: () => void): () => void {
+  return prev
+    ? () => {
+        prev();
+        next();
+      }
+    : next;
 }
 
 function branchKind(props: Record<string, unknown>): IfBranch[typeof VIEW] | null {

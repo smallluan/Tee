@@ -14,17 +14,14 @@ import {
   watchEffect,
 } from "./chart";
 import { createRootScope, type Scope } from "./scope";
+import { define, lookupTag } from "./registry";
 import type { MapSnapshot, TagDef, TeeOptions, TeePlugin } from "./types";
 
-const registry = new Map<string, TagDef>();
+export { define } from "./registry";
+
 let currentApp: TeeApp | null = null;
 
-export const version = "0.9.1";
-
-export function define(name: string, def: TagDef): TagDef {
-  registry.set(name.toLowerCase(), def);
-  return def;
-}
+export const version = "0.9.2";
 
 export function nextTick(fn?: () => void): Promise<void> {
   const p = currentApp ? currentApp.tick() : Promise.resolve();
@@ -69,7 +66,7 @@ export class TeeApp {
     const ctx: CompileContext = {
       engine: this.engine,
       instance: this.instance,
-      lookup: (tag) => tags[tag] ?? registry.get(tag),
+      lookup: (tag) => tags[tag] ?? lookupTag(tag),
       scope: this.scope,
     };
     const view = this.instance.extras.view;

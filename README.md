@@ -44,6 +44,36 @@ export default setup((self) => {
 
 `.tee` 按 TSX 高亮。旧的 `<template>` / `<script>` / `<style>` SFC 仍然能编。
 
+根应用 `export default setup((self) => …)` 就够，不必起名。要复用、要引进来，给它一个带连字符的标签名：
+
+```tsx
+// CountChip.tee
+import { setup } from "tee-framework";
+
+export default setup({
+  tag: "count-chip",
+  setup(self) {
+    return <span class="chip">{self.value}</span>;
+  },
+});
+```
+
+```tsx
+import CountChip from "./CountChip.tee";
+
+export default setup((self) => {
+  self.n = 0;
+  return (
+    <main>
+      <CountChip value={self.n} />
+      <count-chip value={self.n} />
+    </main>
+  );
+});
+```
+
+`setup({ tag })` 会 `define` 到全局表。也可以手写 `define("count-chip", setup((self) => …))`。PascalCase 用引进来的那份对象；小写带连字符的标签走注册表。自定义标签名必须有连字符。每个子组件有自己的 `self`，父级传进去的属性就是子级 `self` 上的同名字段。
+
 可复用逻辑是普通函数，参数就是这份对象：
 
 ```ts

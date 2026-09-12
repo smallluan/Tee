@@ -1,3 +1,4 @@
+import { define } from "./registry";
 import {
   SCOPE_HOST,
   defineComputed,
@@ -239,5 +240,6 @@ export function setup(fn: SetupFn): TagDef;
 export function setup(def: SetupDef): TagDef;
 export function setup(input: SetupFn | SetupDef): TagDef {
   if (typeof input === "function") return { setup: input };
+  if (input.tag) define(input.tag, input);
   return input;
 }

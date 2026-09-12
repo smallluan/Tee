@@ -78,4 +78,33 @@ describe("setup returns DOM", () => {
     expect(host.querySelector("p")?.textContent).toBe("1");
     void Fragment;
   });
+
+  it("mounts a named child from define() or the imported TagDef", async () => {
+    const Chip = setup({
+      tag: "demo-chip",
+      setup(self) {
+        return jsx("span", { class: "chip", children: () => self.label });
+      },
+    });
+    const { app, host } = mount({
+      ...setup((self) => {
+        self.label = "茶";
+        return jsx("main", {
+          children: [
+            jsx(Chip, { label: () => self.label }),
+            jsx("demo-chip", { label: () => `再${self.label}` }),
+          ],
+        });
+      }),
+    });
+    const chips = host.querySelectorAll(".chip");
+    expect(chips[0]?.textContent).toBe("茶");
+    expect(chips[1]?.textContent).toBe("再茶");
+
+    app.data.label = "岩";
+    await tick(app);
+    expect(chips[0]?.textContent).toBe("岩");
+    expect(chips[1]?.textContent).toBe("再岩");
+    expect(Chip.tag).toBe("demo-chip");
+  });
 });

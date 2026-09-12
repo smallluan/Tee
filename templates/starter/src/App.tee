@@ -1,4 +1,5 @@
 import { setup, computed } from "tee-framework";
+import CountChip from "./CountChip.tee";
 import "./App.less";
 
 export default setup((self) => {
@@ -22,7 +23,7 @@ export default setup((self) => {
 
       <div class="row">
         <button t-on:click={() => (self.count = Number(self.count) + 1)}>count {self.count}</button>
-        <span class="chip">{self.doubled}</span>
+        <CountChip value={self.doubled} />
       </div>
 
       <p t-if={self.count === 0} class="empty">
