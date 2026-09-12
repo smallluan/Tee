@@ -1,6 +1,6 @@
 {
   "name": "tee-framework",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Tee — a point-to-point reactive frontend framework driven by bidirectional DOM maps, not a virtual DOM.",
   "type": "module",
   "main": "./dist/index.js",
@@ -33,8 +33,14 @@
   "files": [
     "dist",
     "scripts",
-    "templates",
     "editor",
+    "templates/starter/index.html",
+    "templates/starter/package.json",
+    "templates/starter/README.md",
+    "templates/starter/tsconfig.json",
+    "templates/starter/vite.config.ts",
+    "templates/starter/src",
+    "templates/starter/.vscode",
     "README.md",
     "LICENSE"
   ],

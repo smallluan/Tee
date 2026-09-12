@@ -1,0 +1,6 @@
+templates/starter/node_modules
+templates/starter/package-lock.json
+**/*.log
+coverage
+.vite
+.DS_Store
