@@ -10,7 +10,7 @@ Sibling chain. Same idea as Vue `v-if`.
 <p t-else class="ok">已经 {self.count} 次了。</p>
 ```
 
-False branches are **not** on the tree. Switching mounts / unmounts real nodes.
+False branches are **not** on the tree. Switching mounts / unmounts real nodes. A child component inside the branch is created when the branch enters, destroyed when it leaves — entering again mounts a new instance. Do not expect the first `DocumentFragment` to still have children.
 
 ## `t-show`
 

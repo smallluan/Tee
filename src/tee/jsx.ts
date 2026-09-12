@@ -10,7 +10,7 @@ import { createRootScope, type Scope } from "./scope";
 import { Rank, rankOf } from "./strata";
 import type { Site, TagDef } from "./types";
 
-export type TeeView = Node | DocumentFragment | TeeChild[] | IfBranch | RepeatBranch;
+export type TeeView = Node | DocumentFragment | TeeChild[] | IfBranch | RepeatBranch | ComponentBranch;
 export type TeeChild = TeeView | string | number | boolean | null | undefined | (() => unknown) | unknown;
 
 const VIEW = Symbol("tee-view");
@@ -29,6 +29,14 @@ interface RepeatBranch {
   index: string;
   key?: string;
   render: (ctx: CompileContext, item: unknown, index: number) => TeeView;
+}
+
+/** Not mounted yet. t-if / For remount must instantiate again — a consumed DocumentFragment is empty. */
+interface ComponentBranch {
+  [VIEW]: "component";
+  def: TagDef;
+  props: Record<string, unknown>;
+  children: unknown;
 }
 
 export function isTeeView(value: unknown): boolean {
@@ -73,7 +81,7 @@ export function jsx(
   const all = props ?? {};
   const { children, ...rest } = all;
   if (isTeeComponent(type) || isTagDef(type)) {
-    return mountTagDef(type, rest, children);
+    return asComponent(type, rest, children);
   }
   if (typeof type === "function") {
     return type({ ...rest, children });
@@ -134,7 +142,7 @@ function createElement(tag: string, props: Record<string, unknown>, children: un
   }
   const def = ctx.lookup(tag.toLowerCase()) ?? lookupTag(tag);
   if (def) {
-    return mountTagDef(def, props, children);
+    return asComponent(def, props, children);
   }
   const el = document.createElement(tag);
   bindProps(el, props, ctx);
@@ -402,6 +410,10 @@ function appendChildren(parent: Node, children: TeeChild[], ctx: CompileContext)
       mountRepeat(parent, child, ctx);
       continue;
     }
+    if (isComponent(child)) {
+      appendOne(parent, mountComponent(child, ctx), ctx);
+      continue;
+    }
     appendOne(parent, child, ctx);
   }
   flushIf();
@@ -429,7 +441,7 @@ function appendOne(parent: Node, child: TeeChild, ctx: CompileContext): void {
 }
 
 export function mountView(parent: Node, view: unknown, ctx: CompileContext): void {
-  appendChildren(parent, flatten(view), ctx);
+  withView(ctx, () => appendChildren(parent, flatten(view), ctx));
 }
 
 function isIf(value: unknown): value is IfBranch {
@@ -440,6 +452,18 @@ function isIf(value: unknown): value is IfBranch {
 
 function isRepeat(value: unknown): value is RepeatBranch {
   return Boolean(value && typeof value === "object" && (value as RepeatBranch)[VIEW] === "repeat");
+}
+
+function isComponent(value: unknown): value is ComponentBranch {
+  return Boolean(value && typeof value === "object" && (value as ComponentBranch)[VIEW] === "component");
+}
+
+function asComponent(def: TagDef, props: Record<string, unknown>, children: unknown): ComponentBranch {
+  return { [VIEW]: "component", def, props, children };
+}
+
+function mountComponent(child: ComponentBranch, ctx: CompileContext): TeeView {
+  return withView(ctx, () => mountTagDef(child.def, child.props, child.children));
 }
 
 function mountIf(parent: Node, chain: IfBranch[], ctx: CompileContext): void {

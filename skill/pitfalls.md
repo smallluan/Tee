@@ -8,6 +8,10 @@ Tee used to stash the setup return on `extras.view`, so `self.view = "home"` was
 
 TypeScript JSX split the dotted name. Current Tee quotes it before emit. Prefer `t-on:submit.prevent={...}`. `e.preventDefault()` in the handler still works.
 
+## Sibling `t-if` + `<Child />` used to go empty
+
+Two sibling `t-if` blocks (list vs `<Child />`). A→B→A→B: second B was an empty section. `jsx(Child)` used to mount during App setup and return a `DocumentFragment`; the first insert emptied it. Current Tee keeps the child as a lazy descriptor and instantiates it when the branch mounts (0.9.9+).
+
 ## `setup` ran once
 
 **Wrong:** expect the function to run again after `self.count++`.  

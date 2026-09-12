@@ -191,6 +191,56 @@ describe("setup returns DOM", () => {
     expect([...host.querySelectorAll("li")].map((el) => el.textContent)).toEqual(["岩茶", "铁观音"]);
   });
 
+  it("remounts a child component each time a sibling t-if branch returns", async () => {
+    let chips = 0;
+    const Chip = setup(function Chip() {
+      chips += 1;
+      return jsx("span", { class: "chip", children: "子" });
+    });
+    const { app, host } = mount({
+      ...setup(function App(self) {
+        self.page = "a";
+        self.items = [{ id: 1, name: "龙井" }];
+        return jsx("main", {
+          children: [
+            jsx("section", {
+              "t-if": () => self.page === "a",
+              class: "list",
+              children: For({
+                each: () => self.items as Array<{ id: number; name: string }>,
+                by: "id",
+                children: (item) => jsx("p", { children: () => item.name }),
+              }),
+            }),
+            jsx("section", {
+              "t-if": () => self.page === "b",
+              class: "detail",
+              children: jsx(Chip, {}),
+            }),
+          ],
+        });
+      }),
+    });
+    expect(host.querySelector(".list")?.textContent).toContain("龙井");
+    expect(host.querySelector(".detail")).toBeNull();
+    expect(chips).toBe(0);
+
+    app.data.page = "b";
+    await tick(app);
+    expect(host.querySelector(".detail .chip")?.textContent).toBe("子");
+    expect(chips).toBe(1);
+
+    app.data.page = "a";
+    await tick(app);
+    expect(host.querySelector(".detail")).toBeNull();
+
+    app.data.page = "b";
+    await tick(app);
+    expect(host.querySelector(".detail .chip")?.textContent).toBe("子");
+    expect(host.querySelector(".detail")?.childNodes.length).toBeGreaterThan(0);
+    expect(chips).toBe(2);
+  });
+
   it("lets self.view be user state, not the setup return slot", async () => {
     const { app, host } = mount({
       ...setup((self) => {
