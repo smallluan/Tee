@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { compileTSX, isSFCSource } from "../src/tee/jsx-transform";
 import { mount, tick } from "./helpers";
 import { setup, computed } from "../src/tee/chart";
-import { jsx, Fragment } from "../src/tee/jsx";
+import { jsx, Fragment, For } from "../src/tee/jsx";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -33,6 +33,30 @@ export default setup((self) => {
     expect(js).toContain('class: "ok"');
     expect(js).not.toMatch(/t-if:\s*true/);
     expect(js).toContain("children:");
+  });
+
+  it("binds For from jsx-runtime when the tag is used without an import", () => {
+    const js = compileTSX(
+      `import { setup } from "tee-framework";
+export default setup(function App(self) {
+  return <For each={self.items} by="id">{(item) => <li>{item.name}</li>}</For>;
+});`,
+      "App.tee",
+    );
+    expect(js).toMatch(/\{[^}]*\bFor\b[^}]*\}\s*from "tee-framework\/jsx-runtime"/);
+    expect(js).toContain("_jsx(For,");
+  });
+
+  it("keeps an existing For import and still emits the component call", () => {
+    const js = compileTSX(
+      `import { setup, For } from "tee-framework";
+export default setup(function App(self) {
+  return <For each={self.items}>{(item) => <li>{item.name}</li>}</For>;
+});`,
+      "App.tee",
+    );
+    expect(js).toContain('import { setup, For } from "tee-framework"');
+    expect(js.match(/\bFor\b/g)?.length).toBeGreaterThan(1);
   });
 
   it("compiles the starter App.tee without eating children or handlers", () => {
@@ -107,5 +131,30 @@ describe("setup returns DOM", () => {
     app.data.label = "岩";
     await tick(app);
     expect(host.querySelector(".chip")?.textContent).toBe("岩");
+  });
+
+  it("repeats and reorders rows through For", async () => {
+    const { app, host } = mount({
+      ...setup((self) => {
+        self.items = [
+          { id: 1, name: "龙井" },
+          { id: 2, name: "岩茶" },
+        ];
+        return jsx("ul", {
+          children: For({
+            each: () => self.items as Array<{ id: number; name: string }>,
+            by: "id",
+            children: (item) => jsx("li", { children: () => item.name }),
+          }),
+        });
+      }),
+    });
+    expect([...host.querySelectorAll("li")].map((el) => el.textContent)).toEqual(["龙井", "岩茶"]);
+    app.data.items = [
+      { id: 2, name: "岩茶" },
+      { id: 3, name: "铁观音" },
+    ];
+    await tick(app);
+    expect([...host.querySelectorAll("li")].map((el) => el.textContent)).toEqual(["岩茶", "铁观音"]);
   });
 });

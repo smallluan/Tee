@@ -21,7 +21,39 @@ export function compileTSX(source: string, fileName = "component.tee"): string {
     },
     fileName: asTsxName(fileName),
   });
-  return result.outputText;
+  return injectJsxHelpers(result.outputText, source);
+}
+
+const JSX_HELPERS = ["For", "Fragment"] as const;
+
+/** `<For>` compiles to `_jsx(For, …)`. Bind the helper if the file never imported it. */
+function injectJsxHelpers(emit: string, source: string): string {
+  const names = JSX_HELPERS.filter((name) => usesJsxTag(source, name) && !importBinds(emit, name));
+  if (!names.length) return emit;
+  const runtime = emit.match(/import\s*\{([^}]*)\}\s*from\s*["']tee-framework\/jsx-runtime["']\s*;?/);
+  if (runtime) {
+    const merged = `${runtime[1].trim().replace(/,?\s*$/, "")}, ${names.join(", ")}`;
+    return emit.replace(runtime[0], `import { ${merged} } from "tee-framework/jsx-runtime";`);
+  }
+  return `import { ${names.join(", ")} } from "tee-framework/jsx-runtime";\n${emit}`;
+}
+
+function usesJsxTag(source: string, name: string): boolean {
+  return new RegExp(`<${name}(?:[\\s>/])`).test(source);
+}
+
+function importBinds(emit: string, name: string): boolean {
+  const re = /import\s*\{([^}]+)\}\s*from\s*["'][^"']+["']/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(emit))) {
+    for (const part of match[1].split(",")) {
+      const spec = part.trim();
+      if (!spec) continue;
+      const [imported, local] = spec.split(/\s+as\s+/);
+      if (imported.trim() === name || local?.trim() === name) return true;
+    }
+  }
+  return false;
 }
 
 function asTsxName(fileName: string): string {

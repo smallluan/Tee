@@ -72,8 +72,11 @@ export function jsx(
   if (typeof type === "function") {
     return type({ ...rest, children });
   }
-  if (type === Fragment) {
+  if (type === Fragment || type === "Fragment") {
     return flatten(children);
+  }
+  if (type === "For") {
+    return For({ ...rest, children } as Parameters<typeof For>[0]);
   }
   return createElement(type, rest, children);
 }

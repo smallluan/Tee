@@ -1,2 +1,2 @@
-export { jsx, jsxs, jsxDEV, Fragment } from "./jsx";
+export { jsx, jsxs, jsxDEV, Fragment, For } from "./jsx";
 export type { JSX } from "./jsx";

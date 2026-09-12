@@ -97,6 +97,8 @@ declare module "*.css" {
   const value: string;
   export default value;
 }
+declare const For: typeof import("tee-framework").For;
+declare const Fragment: typeof import("tee-framework").Fragment;
 `;
 
 export class TeeLanguageProject {
