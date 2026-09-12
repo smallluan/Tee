@@ -385,6 +385,8 @@ export function extractBindings(script: string): Binding[] {
 /** Public names people import from `tee-framework`. Hover/complete even without tsserver. */
 export const TEE_NAMED_EXPORTS: Array<{ name: string; detail: string }> = [
   { name: "setup", detail: "setup(function App(self) { ... }): Tee component — function name is the name; runs once on self." },
+  { name: "For", detail: "For — TSX list. <For each={self.items} by=\"id\">{(item, index) => <li>{item.name}</li>}</For>" },
+  { name: "Fragment", detail: "Fragment — <>...</> wrapper; no extra DOM node." },
   { name: "computed", detail: "computed(() => expr): Ref<T> — cached field on self; template has no .value." },
   { name: "watch", detail: "watch(source, cb, options?): stop — runs after mapped data changes." },
   { name: "watchEffect", detail: "watchEffect(effect): stop" },

@@ -136,7 +136,7 @@ describe("tee language service", () => {
 
     const imported = project.completions(file, at(typingImport, "import { ") + "import { ".length);
     const importedNames = imported.map((c) => c.name);
-    expect(importedNames).toEqual(expect.arrayContaining(["setup", "computed", "watch", "onMounted"]));
+    expect(importedNames).toEqual(expect.arrayContaining(["setup", "computed", "watch", "onMounted", "For", "Fragment"]));
 
     project.upsert(file, setupSfc);
     const selfDot = project.completions(file, at(setupSfc, "self.guest") + "self.".length);

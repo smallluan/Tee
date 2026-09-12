@@ -14,6 +14,17 @@
     "body": "t-repeat={$1}",
     "description": "Repeat this node from a list getter."
   },
+  "tee-for": {
+    "prefix": "For",
+    "body": [
+      "<For each={self.$1} by=\"id\">",
+      "  {(item, index) => (",
+      "    <li>{item.$2}</li>",
+      "  )}",
+      "</For>"
+    ],
+    "description": "Tee list. Import For from tee-framework."
+  },
   "tee-on-click": {
     "prefix": "t-on:click",
     "body": "t-on:click={() => $1}",
