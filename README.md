@@ -25,6 +25,7 @@ Tee 不用虚拟 DOM。**数据路径和真实 DOM 站点之间有一张双向�
 2. **组件是函数，函数名就是组件名。** `setup` 只绑 Tee 的合同：这个函数只跑一次，`self` 是那份对象，返回的 DOM 进映射表。它不起名。
 3. **样式不写在组件里。** `import "./App.less"`，和 React 一样从外面引进来。
 4. **组合是普通函数往这份对象上写字段。** 更新是映射表上的站点，不是函数再跑一遍。
+5. **路由写在同一份对象上。** `router(self, { routes })` 写下 `$route` / `$router`。`<RouterView>` 按路径模板复用页面，不重跑 App。
 
 ```tsx
 import { setup, computed } from "tee-framework";
@@ -69,6 +70,31 @@ export default setup((self) => {
   self.label = computed(() => `n=${self.n}`);
 });
 ```
+
+路由和别的框架同一套词，合同跟 TwinMap 对齐：App 的 `setup` 只跑一次；`<RouterView>` 是一行 `<For>`，key 是路径模板（`/tea/:id`），不是解析后的 URL。`/tea/1` → `/tea/2` 复用页面实例，只改 `self.id`。
+
+```tsx
+import { setup, router, Link, RouterView } from "tee-framework";
+import Home from "./Home.tee";
+import Tea from "./Tea.tee";
+
+export default setup(function App(self) {
+  router(self, {
+    routes: [
+      { path: "/", component: Home },
+      { path: "/tea/:id", component: Tea },
+    ],
+  });
+  return (
+    <main>
+      <Link to="/">首页</Link>
+      <RouterView />
+    </main>
+  );
+});
+```
+
+默认 `hash`（不用服务器回退）。`history` 要主机能回 `index.html`。没有嵌套路由、`beforeEach`、lazy。
 
 手顺还在的人可以继续 `ref` + `return`。Tee 会把返回值拆到同一份对象上，模板仍然写 `{{ n }}`，不是 `{{ n.value }}`：
 
@@ -245,6 +271,7 @@ src/tee/html.ts      模板 HTML → AST
 src/tee/codegen.ts   .tee → DOM 工厂
 src/tee/sfc.ts       单文件拆块
 src/tee/jsx.ts       TSX 运行时（setup 返回真实 DOM）
+src/tee/router.ts    router / Link / RouterView
 src/tee/plugin.ts    Vite 插件
 src/tee/compile.ts   挂载
 src/tee/engine.ts    按等级冲洗
@@ -253,6 +280,6 @@ templates/starter/
 editor/
 ```
 
-公开入口：`Tee.create`、`Tee.define`、`Tee.setup`、`Tee.nextTick`、`Tee.version`，以及 `setup` / `computed` / `watch` / `onMounted` / `ref`。
+公开入口：`Tee.create`、`Tee.define`、`Tee.setup`、`Tee.nextTick`、`Tee.version`，以及 `setup` / `computed` / `watch` / `onMounted` / `ref` / `router` / `Link` / `RouterView`。
 
 npm 包：`tee-framework`、`create-tee`。发布到 npm 的是 `dist/` 里的 JavaScript（Node 加载 `vite.config.ts` 时不会给 `node_modules` 里的 `.ts` 剥类型）。

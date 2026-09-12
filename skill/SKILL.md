@@ -7,7 +7,7 @@ description: Tee (tee-framework) — no virtual DOM, TwinMap patches real nodes.
 
 Tee is not React, Vue, or Svelte. Same words (`setup`, `computed`, `watch`), different contract.
 
-**Do not invent APIs.** If a file in this folder does not describe it, Tee does not have it (no router, no SSR, no Suspense, no `useState`, no `v-for` in TSX).
+**Do not invent APIs.** If a file in this folder does not describe it, Tee does not have it (no SSR, no Suspense, no `useState`, no `v-for` in TSX).
 
 Read **this index first**, then open **only** the topic you need.
 
@@ -29,6 +29,7 @@ Read **this index first**, then open **only** the topic you need.
 | Child components, props, emit | [components.md](components.md) |
 | `t-ref`, `t-html`, class / style | [directives.md](directives.md) |
 | Reuse logic: `useXxx(self)` | [composition.md](composition.md) |
+| Pages: `router` / `<Link>` / `<RouterView>` | [router.md](router.md) |
 | Old SFC, `define("tea-card")`, slots | [sfc.md](sfc.md) |
 | Compact API cheat sheet | [api.md](api.md) |
 | Typical AI mistakes | [pitfalls.md](pitfalls.md) |

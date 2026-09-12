@@ -55,6 +55,18 @@
     "body": "t-model=\"$1\"",
     "description": "Two-way bind an input."
   },
+  "tee-router": {
+    "prefix": "router",
+    "body": [
+      "router(self, {",
+      "  routes: [",
+      "    { path: \"/\", component: $1 },",
+      "    { path: \"*\", component: $2 },",
+      "  ],",
+      "});"
+    ],
+    "description": "router(self, { routes }). Writes $route / $router."
+  },
   "tee-setup": {
     "prefix": "setup",
     "body": [

@@ -51,7 +51,7 @@ return <ul>{self.teas.map((t) => <li>{t.name}</li>)}</ul>;
 
 ## Invented APIs
 
-Tee has no router, SSR, Suspense, `useState`, `useEffect`, `v-for` in TSX, or `provide()` setup helper. See [contract.md](contract.md).
+Tee has no SSR, Suspense, `useState`, `useEffect`, `v-for` in TSX, or `provide()` setup helper. Pages are `router` / `<Link>` / `<RouterView>` — [router.md](router.md). See [contract.md](contract.md).
 
 ## `Cannot find module './X.tee'`
 

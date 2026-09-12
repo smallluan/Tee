@@ -20,6 +20,7 @@ Assigning `self.count = 1` patches mapped sites. You do not call `setState`.
 | `$emit(event, payload?)` | Notify the parent. Parent listens with `t-on:event` |
 | `$nextTick(fn?)` | After the current flush |
 | `$el` | Host element after mount (when set) |
+| `$route` / `$router` | After `router(self, { routes })`. See [router.md](router.md) |
 
 ```tsx
 self.$emit("save", { id: self.id });

@@ -19,6 +19,8 @@ export default setup(function App(self) {
 
 Call `useXxx(self)` **during setup**, not later in an event (unless you only assign methods).
 
+`router(self, { routes })` is the same shape: a function that writes `$route` / `$router` onto `self`. See [router.md](router.md).
+
 `computed` / `watch` / `onMounted` inside `useXxx` are fine because setup is still on the stack.
 
 ## Do not

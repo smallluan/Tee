@@ -25,6 +25,8 @@ export interface SelfApi {
   readonly $refs: Record<string, Element | undefined>;
   $emit(event: string, payload?: unknown): void;
   $nextTick(fn?: () => void): Promise<void>;
+  $route?: import("./router").RouteLocation;
+  $router?: import("./router").RouterApi;
 }
 
 export type Self = SelfApi & Record<string, any>;

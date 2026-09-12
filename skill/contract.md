@@ -37,10 +37,10 @@ self.count = 1
 
 Do not add these unless the user asks you to build them from scratch:
 
-- Router, `<Link>`, nested routes
+- Nested routes, `beforeEach`, lazy route import, scroll behavior
 - SSR / SSG
 - Suspense, error boundaries, lazy/render boundaries
 - Official store, i18n, head manager
 - Markdown / MDX pipeline
 
-Hash + `t-if` can fake a tiny page switch. That is an app choice, not a Tee API.
+Pages use `router(self, { routes })` + `<Link>` + `<RouterView>`. See [router.md](router.md).

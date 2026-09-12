@@ -48,6 +48,12 @@ export function withView<T>(ctx: CompileContext, fn: () => T): T {
   }
 }
 
+export function viewSelf(): Self {
+  const scope = viewCtx().scope;
+  if (!scope) throw new Error("<Link> / <RouterView> need a mounted Tee view");
+  return scope as Self;
+}
+
 function viewCtx(): CompileContext {
   if (viewStack.length) return viewStack[viewStack.length - 1];
   const c = current();

@@ -9,7 +9,8 @@ npm run dev
 
 ## 文件
 
-- `src/App.tee` — `setup(function App)`，函数名就是组件名
+- `src/App.tee` — `router(self, { routes })` + `<Link>` + `<RouterView>`
+- `src/Home.tee` / `About.tee` / `Tea.tee` — 页面。`/tea/:id` 换 id 不重跑 setup
 - `src/CountChip.tee` — `setup(function CountChip)`，引进去用 `<CountChip />`
 - `src/App.less` — 样式，外部引入
 - `src/main.ts` — `Tee.create`

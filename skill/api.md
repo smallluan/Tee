@@ -22,6 +22,10 @@ Imports from `tee-framework` unless noted.
 | `setup(function Name(self) { return <.../> })` | Component. Name = tag identity |
 | `self` | Shared object |
 | `self.$refs` / `$emit` / `$nextTick` / `$el` | Instance API |
+| `router(self, { routes, mode? })` | Writes `$route` / `$router`. Default `hash` |
+| `self.$route` | `{ path, fullPath, params, query, name }` |
+| `self.$router` | `{ push, replace, back, mode }` |
+| `<Link to>` / `<RouterView />` | Nav + outlet. Same pattern reuses the page |
 | `computed(get)` | Derived field on `self` |
 | `watch(source, cb?, opts?)` | After change; `{ immediate }` |
 | `watchEffect(fn)` | `watch(fn)` |

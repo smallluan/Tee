@@ -90,13 +90,16 @@ export default setup(function App(self) {
   });
 
   it("compiles the starter App.tee without eating children or handlers", () => {
-    const src = readFileSync(join(root, "templates/starter/src/App.tee"), "utf8");
-    const js = compileTSX(src, "App.tee");
-    expect(js).toContain("tee-framework/jsx-runtime");
-    expect(js).toContain("() => (self.title)");
-    expect(js).toContain("() => (self.guest || \"访客\")");
-    expect(js).toContain("t-on:click");
-    expect(js).toContain("import \"./App.less\"");
+    const app = compileTSX(readFileSync(join(root, "templates/starter/src/App.tee"), "utf8"), "App.tee");
+    expect(app).toContain("tee-framework/jsx-runtime");
+    expect(app).toContain("import \"./App.less\"");
+    expect(app).toContain("router");
+    expect(app).toMatch(/\bLink\b/);
+    expect(app).toMatch(/\bRouterView\b/);
+    const home = compileTSX(readFileSync(join(root, "templates/starter/src/Home.tee"), "utf8"), "Home.tee");
+    expect(home).toContain("() => (self.title)");
+    expect(home).toContain("() => (self.guest || \"访客\")");
+    expect(home).toContain("t-on:click");
   });
 });
 

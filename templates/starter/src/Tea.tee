@@ -1,0 +1,11 @@
+import { setup } from "tee-framework";
+
+export default setup(function Tea(self) {
+  return (
+    <section>
+      <h1>{self.id}</h1>
+      <p class="lede">模板是 /tea/:id。换一种茶只改 self.id，这个页面的 setup 不会再跑。</p>
+      <p class="hello">现在 {self.$route.fullPath}</p>
+    </section>
+  );
+});

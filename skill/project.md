@@ -13,7 +13,10 @@ npm run dev
 
 ```
 src/main.ts          Tee.create({ el: "#app", ...App })
-src/App.tee          setup(function App)
+src/App.tee          router() + <Link> + <RouterView>
+src/Home.tee         first page
+src/About.tee        second page
+src/Tea.tee          /tea/:id — same instance when only id changes
 src/CountChip.tee    setup(function CountChip) — imported as a child
 src/App.less         styles for App; imported, not inlined
 src/vite-env.d.ts    declare module "*.tee"
@@ -68,7 +71,7 @@ export default defineConfig({
 ## Imports
 
 ```ts
-import { Tee, setup, computed, watch, onMounted, For, Fragment } from "tee-framework";
+import { Tee, setup, computed, watch, onMounted, For, Fragment, router, Link, RouterView } from "tee-framework";
 import { tee } from "tee-framework/plugin";
 ```
 

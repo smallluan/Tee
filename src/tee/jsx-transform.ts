@@ -47,7 +47,7 @@ export function compileTSXWithMap(
   };
 }
 
-const JSX_HELPERS = ["For", "Fragment"] as const;
+const JSX_HELPERS = ["For", "Fragment", "Link", "RouterView"] as const;
 
 /** `<For>` compiles to `_jsx(For, …)`. Bind the helper if the file never imported it. */
 function injectJsxHelpers(emit: string, source: string): string {

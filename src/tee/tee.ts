@@ -1,5 +1,6 @@
 import { mountTemplate, applyInject, applyProvide, type CompileContext } from "./compile";
 import { mountView, jsx, Fragment, For } from "./jsx";
+import { router, Link, RouterView } from "./router";
 import { Engine } from "./engine";
 import { Instance } from "./instance";
 import {
@@ -21,7 +22,7 @@ export { define } from "./registry";
 
 let currentApp: TeeApp | null = null;
 
-export const version = "0.9.7";
+export const version = "0.9.8";
 
 export function nextTick(fn?: () => void): Promise<void> {
   const p = currentApp ? currentApp.tick() : Promise.resolve();
@@ -163,4 +164,7 @@ export const Tee = {
   jsx,
   Fragment,
   For,
+  router,
+  Link,
+  RouterView,
 };

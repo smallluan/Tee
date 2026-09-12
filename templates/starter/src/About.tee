@@ -1,0 +1,10 @@
+import { setup } from "tee-framework";
+
+export default setup(function About() {
+  return (
+    <section>
+      <h1>关于</h1>
+      <p class="lede">换页改的是 self.$route。App 的 setup 不会再跑一遍。</p>
+    </section>
+  );
+});

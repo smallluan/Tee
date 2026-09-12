@@ -20,7 +20,10 @@ describe("create-tee", () => {
       expect(readFileSync(join(dest, "src/vite-env.d.ts"), "utf8")).toContain('declare module "*.tee"');
       expect(readFileSync(join(dest, "tsconfig.json"), "utf8")).toContain("allowArbitraryExtensions");
       expect(readFileSync(join(dest, "src/App.tee"), "utf8")).toContain('import "./App.less"');
+      expect(readFileSync(join(dest, "src/App.tee"), "utf8")).toContain("router(self");
       expect(readFileSync(join(dest, "src/App.tee"), "utf8")).toContain("return (");
+      expect(existsSync(join(dest, "src/Home.tee"))).toBe(true);
+      expect(existsSync(join(dest, "skill/router.md"))).toBe(true);
       expect(readFileSync(join(dest, "src/App.less"), "utf8")).toContain("@paper");
       expect(readFileSync(join(dest, "src/main.ts"), "utf8")).toContain("Tee.create");
       expect(readFileSync(join(dest, ".vscode/settings.json"), "utf8")).toContain('"*.tee": "tee"');

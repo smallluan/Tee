@@ -33,6 +33,8 @@ return (
 
 No extra wrapper node. `<Fragment>` is the same helper.
 
+Pages go in `<RouterView />` (a one-row `<For>`). See [router.md](router.md).
+
 ## What not to return
 
 - A new element tree built with `.map()` each time (setup does not run again)

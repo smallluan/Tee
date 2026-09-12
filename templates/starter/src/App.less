@@ -24,6 +24,25 @@ body {
   color: @leaf;
 }
 
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.15rem;
+  margin: 1.15rem 0 1.6rem;
+}
+
+.nav a {
+  color: @leaf;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.nav a:hover,
+.nav a.active {
+  color: @ink;
+  border-bottom-color: @gold;
+}
+
 h1 {
   font-size: 2.4rem;
   margin: 0 0 0.5rem;
@@ -78,4 +97,14 @@ button {
   background: fade(@gold, 22%);
   color: darken(@gold, 18%);
   font-size: 0.85rem;
+}
+
+@media (max-width: 40rem) {
+  .page {
+    margin: 6vh auto;
+  }
+
+  h1 {
+    font-size: 1.85rem;
+  }
 }

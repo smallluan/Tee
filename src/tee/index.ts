@@ -28,4 +28,6 @@ export { parseSFC, compileSFC, scopeCss, hashScopeId } from "./sfc";
 export { generateRenderBody } from "./codegen";
 export { jsx, jsxs, jsxDEV, Fragment, For, mountView } from "./jsx";
 export type { JSX, TeeView, TeeChild } from "./jsx";
+export { router, Link, RouterView } from "./router";
+export type { RouteRecord, RouteLocation, RouterApi, RouterOptions, RouteComponent } from "./router";
 export { compileTSX, compileTSXWithMap, quoteDottedTeeAttrs, isSFCSource } from "./jsx-transform";
