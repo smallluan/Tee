@@ -61,6 +61,10 @@ Tee has no SSR, Suspense, `useState`, `useEffect`, `v-for` in TSX, or `provide()
 
 Need `src/vite-env.d.ts` (`declare module "*.tee"`) and a current Tee language service (0.9.5+). Reinstall the VSIX after upgrading.
 
+## Off-screen bindings look empty
+
+Below-the-fold sites defer TwinMap until scroll (default). `$refs` / bound text stay empty until promotion. Use above-the-fold targets in `onMounted`, or `Tee.create({ deferViewport: false })`.
+
 ## Child props look stale
 
 Pass `{self.x}` (a getter after compile), not a one-shot `value={1}` if it should track. Parent field updates flow into the child `self`.

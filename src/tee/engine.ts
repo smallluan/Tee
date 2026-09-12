@@ -1,6 +1,7 @@
+import { ViewportMaterializer, observationTarget, type LaunchHooks } from "./materialize";
 import { TwinMap } from "./maps";
 import { RANK_COUNT, Rank, Lattice, emptyStats, type FlushStats } from "./strata";
-import type { MapSnapshot, PropKey, Site, SiteSnapshot } from "./types";
+import type { EngineOptions, MapSnapshot, PropKey, Site, SiteSnapshot } from "./types";
 
 interface TrackFrame {
   props: Set<PropKey>;
@@ -10,6 +11,7 @@ interface TrackFrame {
 export class Engine {
   readonly maps = new TwinMap();
   readonly lattice = new Lattice();
+  readonly materializer: ViewportMaterializer;
   readonly buckets: Site[][] = Array.from({ length: RANK_COUNT }, () => []);
   private spare: Site[][] = Array.from({ length: RANK_COUNT }, () => []);
   private tracking: TrackFrame[] = [];
@@ -22,6 +24,20 @@ export class Engine {
   private computedSeq = 0;
   stats: FlushStats = emptyStats();
   lastFlush: FlushStats = emptyStats();
+
+  constructor(options: EngineOptions = {}) {
+    const deferViewport = options.deferViewport !== false;
+    this.materializer = new ViewportMaterializer(this, deferViewport);
+    this.onFlush(() => this.materializer.flushSync());
+  }
+
+  launchSite(site: Site, hooks?: LaunchHooks): void {
+    this.materializer.launch(site, hooks);
+  }
+
+  flushMaterializer(): void {
+    this.materializer.flushSync();
+  }
 
   nextSiteId(): number {
     return ++this.seq;
@@ -67,6 +83,10 @@ export class Engine {
 
   mark(site: Site): void {
     if (site.dead || site.queued) return;
+    if (!site.materialized && observationTarget(site.node) != null) {
+      site.pendingMark = true;
+      return;
+    }
     site.queued = true;
     this.stats.mark += 1;
     this.buckets[site.rank ?? Rank.Expr].push(site);
@@ -193,6 +213,7 @@ export class Engine {
   }
 
   destroy(): void {
+    this.materializer.destroy();
     this.maps.clear();
     for (const bucket of this.buckets) bucket.length = 0;
     for (const bucket of this.spare) bucket.length = 0;

@@ -20,7 +20,7 @@ Read **this index first**, then open **only** the topic you need.
 | Write a `.tee` module (name, styles, TSX) | [authoring.md](authoring.md) |
 | `self`, `$refs`, `$emit`, `$nextTick` | [self.md](self.md) |
 | `computed` / `watch` / `watchEffect` / `ref` | [reactivity.md](reactivity.md) |
-| `onMounted` / `onUnmounted` | [lifecycle.md](lifecycle.md) |
+| `onMounted` / `onUnmounted`, viewport defer | [lifecycle.md](lifecycle.md) |
 | Return DOM, `{expr}`, `Fragment` | [views.md](views.md) |
 | Lists: `<For>`, not `.map()` | [lists.md](lists.md) |
 | `t-if` / `t-else-if` / `t-else` / `t-show` | [conditionals.md](conditionals.md) |

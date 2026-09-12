@@ -674,8 +674,8 @@ function addSingleDirectRowSite(
     initialized: false,
     run: runSingleDirectRowSite,
   };
-  instance.sites.push(site);
-  site.run();
+  instance.sites.push(site as Site);
+  engine.launchSite(site as Site);
 }
 
 function addDirectRowSite(
@@ -716,7 +716,7 @@ function addDirectRowSite(
     },
   };
   instance.sites.push(site);
-  site.run();
+  engine.launchSite(site);
 }
 
 type RowRenderer = ((parent: Node, scope: Scope, ctx: CompileContext) => void) & {
@@ -1232,11 +1232,14 @@ function addSite(
   };
   site.run = init.run.bind(site);
   ctx.instance.sites.push(site);
-  site.run();
-  if (ctx.once) {
-    site.dead = true;
-    ctx.engine.maps.unlink(site);
-  }
+  ctx.engine.launchSite(site, ctx.once
+    ? {
+        afterRun: () => {
+          site.dead = true;
+          ctx.engine.maps.unlink(site);
+        },
+      }
+    : undefined);
   return site;
 }
 

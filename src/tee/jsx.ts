@@ -641,7 +641,7 @@ function bindGetter(
   };
   site.rank = kind === "show" || kind === "repeat" ? Rank.Structure : rankOf(kind, false);
   ctx.instance.sites.push(site);
-  site.run();
+  engine.launchSite(site);
   return site;
 }
 

@@ -21,6 +21,10 @@ export interface Site {
   debugLabel?: string;
   queued?: boolean;
   dead?: boolean;
+  /** TwinMap + first reactive run completed (immediate or after viewport entry). */
+  materialized?: boolean;
+  /** Queued engine.mark while still off-screen. */
+  pendingMark?: boolean;
   last?: unknown;
   depIds?: number[];
   seen?: number[];
@@ -65,8 +69,15 @@ export interface TagDef extends LifecycleHooks {
   setup?: import("./chart").SetupFn;
 }
 
+export interface EngineOptions {
+  /** When true (default), DOM-tied sites below the viewport defer TwinMap until visible. */
+  deferViewport?: boolean;
+}
+
 export interface TeeOptions extends LifecycleHooks {
   el?: string | Element;
+  /** Defer off-screen site materialization. Default true. */
+  deferViewport?: boolean;
   template?: string;
   render?: (ctx: import("./compile").CompileContext, parent: Node) => void;
   data?: Record<string, unknown> | (() => Record<string, unknown>);

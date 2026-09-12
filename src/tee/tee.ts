@@ -43,7 +43,7 @@ export class TeeApp {
 
   constructor(options: TeeOptions) {
     currentApp = this;
-    this.engine = new Engine();
+    this.engine = new Engine({ deferViewport: options.deferViewport });
     this.instance = new Instance(this.engine);
     const data = resolveData(options.data);
     applyInject(this.instance, options.inject, data);
@@ -75,6 +75,7 @@ export class TeeApp {
     else if (options.render) options.render(ctx, host);
     else mountTemplate(html, host, this.scope, ctx);
     host.removeAttribute("t-cloak");
+    this.engine.materializer.flushSync();
     this.el = host;
     (this.scope as { $el?: Element }).$el = host;
     options.mounted?.call(this.scope);

@@ -210,7 +210,7 @@ export function defineWatch(
     },
   };
   instance.sites.push(site);
-  site.run();
+  engine.launchSite(site);
   return () => {
     site.dead = true;
     engine.maps.unlink(site);
@@ -301,7 +301,7 @@ function bindWatchers(
       },
     };
     instance.sites.push(site);
-    site.run();
+    engine.launchSite(site);
   }
 }
 
