@@ -2,7 +2,7 @@
   "name": "tee-language",
   "displayName": "Tee",
   "description": "TSX highlighting, IntelliSense, and file icon for Tee `.tee` modules.",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "publisher": "tee",
   "icon": "icons/tee.png",
   "engines": {

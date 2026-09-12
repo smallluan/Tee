@@ -27,7 +27,7 @@ export interface SelfApi {
   $nextTick(fn?: () => void): Promise<void>;
 }
 
-export type Self = SelfApi & Record<string, unknown>;
+export type Self = SelfApi & Record<string, any>;
 export type Ctx = Self & { readonly scope: Scope; readonly host: Instance };
 
 const stack: Ctx[] = [];
@@ -237,8 +237,8 @@ export interface SetupDef extends Omit<TagDef, "setup"> {
 
 export const TEE_COMPONENT = Symbol("tee-component");
 
-/** A Tee component. The function name is the component name. */
-export type TeeComponent = SetupFn &
+/** A Tee component. JSX sees props; `setup` still receives `self`. */
+export type TeeComponent = ((props?: Record<string, any>) => any) &
   TagDef & {
     readonly [TEE_COMPONENT]: true;
   };

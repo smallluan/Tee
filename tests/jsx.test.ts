@@ -46,6 +46,17 @@ export default setup((self) => {
   });
 });
 
+describe("TSX types", () => {
+  it("treats JSX children and child-component props as a bag, not Self", () => {
+    const Chip = setup(function Chip(self) {
+      return jsx("span", { children: self.value });
+    });
+    const props: Parameters<typeof Chip>[0] = { value: "茶" };
+    expect(Chip.name).toBe("Chip");
+    expect(props?.value).toBe("茶");
+  });
+});
+
 describe("setup returns DOM", () => {
   it("patches text and t-if without a template block", async () => {
     const { app, host } = mount({

@@ -11,7 +11,7 @@ import { Rank, rankOf } from "./strata";
 import type { Site, TagDef } from "./types";
 
 export type TeeView = Node | DocumentFragment | TeeChild[] | IfBranch | RepeatBranch;
-export type TeeChild = TeeView | string | number | boolean | null | undefined | (() => unknown);
+export type TeeChild = TeeView | string | number | boolean | null | undefined | (() => unknown) | unknown;
 
 const VIEW = Symbol("tee-view");
 const viewStack: CompileContext[] = [];
@@ -621,7 +621,7 @@ type TeeOnEvents = {
 };
 
 export interface TeeAttributes extends TeeOnEvents {
-  children?: TeeChild;
+  children?: TeeChild | TeeChild[];
   class?: unknown;
   className?: unknown;
   id?: unknown;
@@ -661,7 +661,7 @@ export interface TeeAttributes extends TeeOnEvents {
 export namespace JSX {
   export type Element = TeeView;
   export interface ElementChildrenAttribute {
-    children: TeeChild;
+    children: TeeChild | TeeChild[];
   }
   export type IntrinsicElements = {
     [K in keyof HTMLElementTagNameMap]: TeeAttributes;
