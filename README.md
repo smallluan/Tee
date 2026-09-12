@@ -207,7 +207,7 @@ Tee.create({ el: "#app", ...App });
 
 扩展把整个 `.tee` 当 TSX 高亮，并补全 `tee-framework` 的 `setup` / `computed` 以及 `self` 上的字段。
 
-`src/vite-env.d.ts` 给 `import App from "./App.tee"` 提供模块类型。
+`tee-framework` 自带 `*.tee` 模块声明；脚手架里的 `src/vite-env.d.ts` 再写一遍，给 `import App from "./App.tee"` 和 `import CountChip from "./CountChip.tee"` 用。
 
 ## Tee Strata
 

@@ -1,3 +1,5 @@
+import "./tee-modules";
+
 export { Tee, TeeApp, create, define, use, nextTick, version } from "./tee";
 export {
   setup,

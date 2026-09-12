@@ -190,6 +190,25 @@ const value = Math.
     project.dispose();
   });
 
+  it("resolves a sibling .tee import instead of TS2307", () => {
+    const project = createTeeLanguageProject(process.cwd());
+    const app = `${process.cwd()}/tests/fixtures/modules/App.tee`;
+    const chip = `${process.cwd()}/tests/fixtures/modules/CountChip.tee`;
+    const appSource = `import { setup } from "tee-framework";
+import CountChip from "./CountChip.tee";
+
+export default setup(function App(self) {
+  return <CountChip value={self.n} />;
+});
+`;
+    project.upsert(app, appSource);
+    const messages = project.diagnostics(app).map((item) => item.message);
+    expect(messages.join("\n")).not.toMatch(/Cannot find module ['"].\/CountChip\.tee['"]/);
+    const defs = project.definition(app, appSource.indexOf("./CountChip.tee") + 3);
+    expect(defs.some((item) => item.fileName === chip || item.fileName.endsWith("CountChip.tee"))).toBe(true);
+    project.dispose();
+  });
+
   it("completes native t-on: events in a TSX module", () => {
     const tsx = `import { setup } from "tee-framework";
 export default setup(function App(self) {

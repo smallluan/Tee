@@ -21,7 +21,7 @@ export { define } from "./registry";
 
 let currentApp: TeeApp | null = null;
 
-export const version = "0.9.4";
+export const version = "0.9.5";
 
 export function nextTick(fn?: () => void): Promise<void> {
   const p = currentApp ? currentApp.tick() : Promise.resolve();

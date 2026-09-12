@@ -17,6 +17,8 @@ describe("create-tee", () => {
       });
       const pkg = JSON.parse(readFileSync(join(dest, "package.json"), "utf8"));
       expect(pkg.dependencies["tee-framework"]).toMatch(/^file:/);
+      expect(readFileSync(join(dest, "src/vite-env.d.ts"), "utf8")).toContain('declare module "*.tee"');
+      expect(readFileSync(join(dest, "tsconfig.json"), "utf8")).toContain("allowArbitraryExtensions");
       expect(readFileSync(join(dest, "src/App.tee"), "utf8")).toContain('import "./App.less"');
       expect(readFileSync(join(dest, "src/App.tee"), "utf8")).toContain("return (");
       expect(readFileSync(join(dest, "src/App.less"), "utf8")).toContain("@paper");

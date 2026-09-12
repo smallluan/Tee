@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 declare module "*.tee" {
-  import type { TagDef, TeeOptions } from "tee-framework";
-  const mod: TagDef & TeeOptions;
-  export default mod;
+  import type { TeeComponent } from "tee-framework";
+  const component: TeeComponent;
+  export default component;
 }

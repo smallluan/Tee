@@ -1,0 +1,6 @@
+import { setup } from "tee-framework";
+import CountChip from "./CountChip.tee";
+
+export default setup(function App(self) {
+  return <CountChip value={self.n} />;
+});

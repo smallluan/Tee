@@ -84,12 +84,28 @@ const cssService = getCSSLanguageService();
 const lessService = getLESSLanguageService();
 const scssService = getSCSSLanguageService();
 
+const TEE_AMBIENT = `declare module "*.tee" {
+  import type { TeeComponent } from "tee-framework";
+  const component: TeeComponent;
+  export default component;
+}
+declare module "*.less" {
+  const value: string;
+  export default value;
+}
+declare module "*.css" {
+  const value: string;
+  export default value;
+}
+`;
+
 export class TeeLanguageProject {
   private readonly docs = new Map<string, TeeDoc>();
   private readonly rootFiles: string[];
   private readonly languageLibFiles: string[];
   private readonly compilerOptions: ts.CompilerOptions;
   private readonly helperName: string;
+  private readonly ambientName: string;
   private helperText = "";
   private serial = 0;
   private readonly service: ts.LanguageService;
@@ -111,6 +127,7 @@ export class TeeLanguageProject {
       esModuleInterop: true,
       resolveJsonModule: true,
       isolatedModules: true,
+      allowArbitraryExtensions: true,
       jsx: ts.JsxEmit.ReactJSX,
       jsxImportSource: "tee-framework",
     };
@@ -122,6 +139,7 @@ export class TeeLanguageProject {
         ...compilerOptions,
         ...parsed.options,
         allowJs: true,
+        allowArbitraryExtensions: true,
         noEmit: true,
         skipLibCheck: true,
       };
@@ -130,9 +148,10 @@ export class TeeLanguageProject {
       // makes the first completion several seconds slower in large repos.
       rootFiles = [];
     }
-    this.compilerOptions = compilerOptions;
+    this.compilerOptions = { ...compilerOptions, allowArbitraryExtensions: true };
     this.rootFiles = rootFiles;
     this.helperName = normalize(`${root}/__tee_template_intellisense.ts`);
+    this.ambientName = normalize(`${root}/__tee_modules.d.ts`);
 
     const bundledLib = editorRoot ? join(editorRoot, "lib", "typescript", "lib.d.ts") : "";
     const projectLib = join(root, "node_modules", "typescript", "lib", "lib.d.ts");
@@ -143,6 +162,13 @@ export class TeeLanguageProject {
       ? [join(languageLibDir, "lib.es2022.full.d.ts")]
       : [];
     const project = this;
+    const resolutionHost: ts.ModuleResolutionHost = {
+      fileExists: (fileName) => project.readFile(fileName) != null || ts.sys.fileExists(fileName),
+      readFile: (fileName) => project.readFile(fileName) ?? ts.sys.readFile(fileName),
+      directoryExists: ts.sys.directoryExists,
+      getCurrentDirectory: () => project.root,
+      realpath: ts.sys.realpath,
+    };
     const host: ts.LanguageServiceHost = {
       getCompilationSettings: () => project.compilerOptions,
       getCurrentDirectory: () => project.root,
@@ -151,6 +177,7 @@ export class TeeLanguageProject {
       getScriptFileNames: () => [
         ...project.languageLibFiles,
         ...project.rootFiles,
+        project.ambientName,
         ...[...project.docs.keys()].map(virtualName),
         ...(project.helperText ? [project.helperName] : []),
       ],
@@ -160,7 +187,7 @@ export class TeeLanguageProject {
         return text == null ? undefined : ts.ScriptSnapshot.fromString(text);
       },
       getScriptVersion: (fileName) => {
-        if (fileName === project.helperName) return String(project.serial);
+        if (fileName === project.helperName || fileName === project.ambientName) return String(project.serial);
         const source = sourceName(fileName);
         return String(project.docs.get(source)?.version ?? 0);
       },
@@ -171,6 +198,12 @@ export class TeeLanguageProject {
       readFile: (fileName, encoding) => project.readFile(fileName) ?? ts.sys.readFile(fileName, encoding),
       realpath: ts.sys.realpath,
       useCaseSensitiveFileNames: () => ts.sys.useCaseSensitiveFileNames,
+      resolveModuleNameLiterals: (literals, containingFile, _redirected, options) =>
+        literals.map((literal) => {
+          const tee = resolveTeeImport(containingFile, literal.text, (name) => host.fileExists!(name));
+          if (tee) return { resolvedModule: tee };
+          return ts.resolveModuleName(literal.text, containingFile, options, resolutionHost);
+        }),
     };
     this.service = ts.createLanguageService(host, ts.createDocumentRegistry());
   }
@@ -258,10 +291,13 @@ export class TeeLanguageProject {
   private readFile(fileName: string): string | undefined {
     const name = normalize(fileName);
     if (name === this.helperName) return this.helperText || undefined;
-    if (name.endsWith(".tee.ts") || name.endsWith(".tee.tsx")) {
-      const source = sourceName(name);
+    if (name === this.ambientName) return TEE_AMBIENT;
+    if (name.endsWith(".tee") || name.endsWith(".tee.ts") || name.endsWith(".tee.tsx")) {
+      const source = name.endsWith(".tee") ? name : sourceName(name);
       const doc = this.docs.get(source);
-      return doc ? virtualScript(doc.text) : undefined;
+      if (doc) return virtualScript(doc.text);
+      const disk = ts.sys.readFile(source);
+      return disk == null ? undefined : virtualScript(disk);
     }
     return undefined;
   }
@@ -355,6 +391,21 @@ function sourceName(fileName: string): string {
   return normalize(fileName.endsWith(".tee.tsx") ? fileName.slice(0, -4) : fileName.endsWith(".tee.ts") ? fileName.slice(0, -3) : fileName);
 }
 
+function resolveTeeImport(
+  containingFile: string,
+  specifier: string,
+  fileExists: (fileName: string) => boolean,
+): ts.ResolvedModuleFull | undefined {
+  if (!specifier.endsWith(".tee")) return undefined;
+  const source = normalize(join(dirname(containingFile), specifier));
+  if (!fileExists(source) && !fileExists(virtualName(source))) return undefined;
+  return {
+    resolvedFileName: virtualName(source),
+    extension: ts.Extension.Tsx,
+    isExternalLibraryImport: false,
+  };
+}
+
 function virtualScript(source: string): string {
   const block = parseSFCBlocks(source).find((item) => item.tag === "script");
   if (!block) return source;
@@ -364,7 +415,7 @@ function virtualScript(source: string): string {
 }
 
 function scriptKind(fileName: string): ts.ScriptKind {
-  if (fileName.endsWith(".tsx")) return ts.ScriptKind.TSX;
+  if (fileName.endsWith(".tsx") || fileName.endsWith(".tee")) return ts.ScriptKind.TSX;
   if (fileName.endsWith(".jsx")) return ts.ScriptKind.JSX;
   if (fileName.endsWith(".js") || fileName.endsWith(".mjs") || fileName.endsWith(".cjs")) return ts.ScriptKind.JS;
   return ts.ScriptKind.TS;

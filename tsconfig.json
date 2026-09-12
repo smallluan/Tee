@@ -12,6 +12,7 @@
     "isolatedModules": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
+    "allowArbitraryExtensions": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
       "*": ["./*"],
