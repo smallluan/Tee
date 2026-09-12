@@ -1,4 +1,4 @@
-import { current, runSetup, type Self } from "./chart";
+import { current, isTeeComponent, runSetup, type Self } from "./chart";
 import { applyInject, applyProvide, mountTemplate, type CompileContext } from "./compile";
 import { Engine } from "./engine";
 import { display, isBooleanAttr, writeText } from "./expr";
@@ -66,14 +66,14 @@ export function jsx(
 ): TeeView {
   const all = props ?? {};
   const { children, ...rest } = all;
+  if (isTeeComponent(type) || isTagDef(type)) {
+    return mountTagDef(type, rest, children);
+  }
   if (typeof type === "function") {
     return type({ ...rest, children });
   }
   if (type === Fragment) {
     return flatten(children);
-  }
-  if (isTagDef(type)) {
-    return mountTagDef(type, rest, children);
   }
   return createElement(type, rest, children);
 }

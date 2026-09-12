@@ -1,8 +1,5 @@
 import { setup } from "tee-framework";
 
-export default setup({
-  tag: "count-chip",
-  setup(self) {
-    return <span class="chip">{self.value}</span>;
-  },
+export default setup(function CountChip(self) {
+  return <span class="chip">{self.value}</span>;
 });

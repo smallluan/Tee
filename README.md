@@ -22,57 +22,37 @@ Tee 不用虚拟 DOM。**数据路径和真实 DOM 站点之间有一张双向�
 `setup` / `computed` / `watch` / `onMounted` / `ref` 你已经会写。Tee 不发明 hold、derive、trail、act、weave。差别是这三件事：
 
 1. **脚本和视图共用同一份对象。** `self.count` 就是 `{self.count}`。不是 setup 返回一包 ref，再靠编译解开 `.value`。
-2. **`setup` 可以返回真实 DOM（TSX）。** 函数只跑一次，表达式变成 TwinMap 站点。没有组件重渲染。
+2. **组件是函数，函数名就是组件名。** `setup` 只绑 Tee 的合同：这个函数只跑一次，`self` 是那份对象，返回的 DOM 进映射表。它不起名。
 3. **样式不写在组件里。** `import "./App.less"`，和 React 一样从外面引进来。
 4. **组合是普通函数往这份对象上写字段。** 更新是映射表上的站点，不是函数再跑一遍。
 
 ```tsx
 import { setup, computed } from "tee-framework";
+import CountChip from "./CountChip.tee";
 import "./App.less";
 
-export default setup((self) => {
+export default setup(function App(self) {
   self.n = 0;
   self.label = computed(() => `×${Number(self.n) * 2}`);
 
   return (
     <button t-on:click={() => (self.n = Number(self.n) + 1)}>
       {self.label}
+      <CountChip value={self.n} />
     </button>
   );
 });
 ```
 
-`.tee` 按 TSX 高亮。旧的 `<template>` / `<script>` / `<style>` SFC 仍然能编。
-
-根应用 `export default setup((self) => …)` 就够，不必起名。要复用、要引进来，给它一个带连字符的标签名：
-
 ```tsx
-// CountChip.tee
 import { setup } from "tee-framework";
 
-export default setup({
-  tag: "count-chip",
-  setup(self) {
-    return <span class="chip">{self.value}</span>;
-  },
+export default setup(function CountChip(self) {
+  return <span class="chip">{self.value}</span>;
 });
 ```
 
-```tsx
-import CountChip from "./CountChip.tee";
-
-export default setup((self) => {
-  self.n = 0;
-  return (
-    <main>
-      <CountChip value={self.n} />
-      <count-chip value={self.n} />
-    </main>
-  );
-});
-```
-
-`setup({ tag })` 会 `define` 到全局表。也可以手写 `define("count-chip", setup((self) => …))`。PascalCase 用引进来的那份对象；小写带连字符的标签走注册表。自定义标签名必须有连字符。每个子组件有自己的 `self`，父级传进去的属性就是子级 `self` 上的同名字段。
+`.tee` 按 TSX 高亮。旧的 `<template>` / `<script>` / `<style>` SFC 仍然能编。子组件引进来用函数名，每个有自己的 `self`，父级传入的属性就是子级上的同名字段。
 
 可复用逻辑是普通函数，参数就是这份对象：
 

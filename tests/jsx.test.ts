@@ -79,32 +79,22 @@ describe("setup returns DOM", () => {
     void Fragment;
   });
 
-  it("mounts a named child from define() or the imported TagDef", async () => {
-    const Chip = setup({
-      tag: "demo-chip",
-      setup(self) {
-        return jsx("span", { class: "chip", children: () => self.label });
-      },
+  it("uses the function name as the component name", async () => {
+    const Chip = setup(function Chip(self) {
+      return jsx("span", { class: "chip", children: () => self.label });
     });
+    expect(Chip.name).toBe("Chip");
     const { app, host } = mount({
-      ...setup((self) => {
+      ...setup(function App(self) {
         self.label = "茶";
         return jsx("main", {
-          children: [
-            jsx(Chip, { label: () => self.label }),
-            jsx("demo-chip", { label: () => `再${self.label}` }),
-          ],
+          children: jsx(Chip, { label: () => self.label }),
         });
       }),
     });
-    const chips = host.querySelectorAll(".chip");
-    expect(chips[0]?.textContent).toBe("茶");
-    expect(chips[1]?.textContent).toBe("再茶");
-
+    expect(host.querySelector(".chip")?.textContent).toBe("茶");
     app.data.label = "岩";
     await tick(app);
-    expect(chips[0]?.textContent).toBe("岩");
-    expect(chips[1]?.textContent).toBe("再岩");
-    expect(Chip.tag).toBe("demo-chip");
+    expect(host.querySelector(".chip")?.textContent).toBe("岩");
   });
 });

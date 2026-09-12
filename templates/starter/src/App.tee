@@ -2,7 +2,7 @@ import { setup, computed } from "tee-framework";
 import CountChip from "./CountChip.tee";
 import "./App.less";
 
-export default setup((self) => {
+export default setup(function App(self) {
   self.title = "新的 Tee 应用";
   self.guest = "";
   self.count = 0;

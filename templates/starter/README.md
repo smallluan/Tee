@@ -9,8 +9,8 @@ npm run dev
 
 ## 文件
 
-- `src/App.tee` — 根 `setup` + TSX（不写样式）
-- `src/CountChip.tee` — 命名子组件，用 `tag: "count-chip"`
+- `src/App.tee` — `setup(function App)`，函数名就是组件名
+- `src/CountChip.tee` — `setup(function CountChip)`，引进去用 `<CountChip />`
 - `src/App.less` — 样式，外部引入
 - `src/main.ts` — `Tee.create`
 - `.vscode/settings.json` — `*.tee` 关联 Tee 语言

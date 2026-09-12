@@ -10,8 +10,9 @@ export {
   current,
   ctxOf,
   runSetup,
+  isTeeComponent,
 } from "./chart";
-export type { Self, SelfApi, Ctx, SetupFn, SetupDef, Ref, WatchOptions } from "./chart";
+export type { Self, SelfApi, Ctx, SetupFn, SetupDef, TeeComponent, Ref, WatchOptions } from "./chart";
 export type { TeeOptions, TagDef, MapSnapshot, SiteSnapshot, WatchSource } from "./types";
 export { TwinMap } from "./maps";
 export { Engine } from "./engine";

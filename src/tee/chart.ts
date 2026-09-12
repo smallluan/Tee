@@ -235,11 +235,37 @@ export interface SetupDef extends Omit<TagDef, "setup"> {
   setup: SetupFn;
 }
 
-/** Component entry. `self` is the same object the template reads. */
-export function setup(fn: SetupFn): TagDef;
+export const TEE_COMPONENT = Symbol("tee-component");
+
+/** A Tee component. The function name is the component name. */
+export type TeeComponent = SetupFn &
+  TagDef & {
+    readonly [TEE_COMPONENT]: true;
+  };
+
+export function isTeeComponent(value: unknown): value is TeeComponent {
+  return typeof value === "function" && Boolean((value as TeeComponent)[TEE_COMPONENT]);
+}
+
+/**
+ * Bind a function to Tee's contract: run once, `self` is the shared object,
+ * returned DOM is mapped. The function name is the component name.
+ */
+export function setup(fn: SetupFn): TeeComponent;
 export function setup(def: SetupDef): TagDef;
 export function setup(input: SetupFn | SetupDef): TagDef {
-  if (typeof input === "function") return { setup: input };
-  if (input.tag) define(input.tag, input);
-  return input;
+  if (typeof input !== "function") {
+    if (input.tag) define(input.tag, input);
+    return input;
+  }
+  const def: TagDef = { setup: input };
+  const component = Object.assign(function Component() {
+    return def;
+  }, def) as TeeComponent;
+  Object.defineProperty(component, "name", {
+    value: input.name || "Anonymous",
+    configurable: true,
+  });
+  Object.defineProperty(component, TEE_COMPONENT, { value: true });
+  return component;
 }
