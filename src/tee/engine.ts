@@ -35,6 +35,10 @@ export class Engine {
     return "c" + ++this.computedSeq + "." + name;
   }
 
+  get trackingActive(): boolean {
+    return this.tracking.length !== 0;
+  }
+
   startTrack(): void {
     this.tracking.push({ props: new Set(), labels: new Set() });
   }
@@ -52,8 +56,12 @@ export class Engine {
 
   notify(prop: PropKey): void {
     this.stats.notify += 1;
-    this.lattice.bump(prop);
-    for (const site of this.maps.sitesFor(prop)) this.mark(site);
+    let needsClock = false;
+    this.maps.forEachSite(prop, (site) => {
+      if (!site.exact) needsClock = true;
+      this.mark(site);
+    });
+    if (needsClock) this.lattice.bump(prop);
     if (!this.flushing) this.schedule();
   }
 
@@ -162,19 +170,20 @@ export class Engine {
 
   snapshot(): MapSnapshot {
     const reverse: SiteSnapshot[] = [];
-    for (const [site, props] of this.maps.reverse) {
-      reverse.push(describeSite(site, [...props], [...(this.maps.debug.get(site) ?? props)]));
+    for (const site of this.maps.reverse.keys()) {
+      reverse.push(describeSite(site, [...this.maps.propsFor(site)], [...this.maps.debugFor(site)]));
     }
     reverse.sort((a, b) => a.id - b.id);
 
     const forward: MapSnapshot["forward"] = [];
-    for (const [prop, sites] of this.maps.forward) {
+    for (const [prop, bucket] of this.maps.forward) {
+      const sites = bucket instanceof Set ? [...bucket] : [bucket];
       forward.push({
         prop,
         label: prop,
-        sites: [...sites]
+        sites: sites
           .map((site) =>
-            describeSite(site, [...this.maps.propsFor(site)], [...(this.maps.debug.get(site) ?? [])]),
+            describeSite(site, [...this.maps.propsFor(site)], [...this.maps.debugFor(site)]),
           )
           .sort((a, b) => a.id - b.id),
       });

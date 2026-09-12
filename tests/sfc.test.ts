@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { compileSFC, parseSFC, scopeCss } from "tee";
 import Hello from "./fixtures/hello.tee";
 import HelloCard from "./fixtures/hello-card.tee";
+import RepeatList from "./fixtures/repeat-list.tee";
 import { mount, tick } from "./helpers";
 
 describe("Tee SFC", () => {
@@ -43,6 +44,22 @@ describe("Tee SFC", () => {
     app.data.msg = "Tee";
     await tick(app);
     expect(host.querySelector(".hi")?.textContent).toBe("Tee");
+  });
+
+  it("compiles keyed repeats to TwinMap row factories", async () => {
+    expect(typeof RepeatList.render).toBe("function");
+    const { app, host } = mount({ ...RepeatList });
+    const before = [...host.querySelectorAll("li")];
+    expect(before.map((node) => node.textContent)).toEqual(["a", "b", "c"]);
+
+    (app.data.items as Array<{ id: number; name: string }>)[1].name = "B";
+    await tick(app);
+
+    expect([...host.querySelectorAll("li")]).toEqual(before);
+    expect(before.map((node) => node.textContent)).toEqual(["a", "B", "c"]);
+    expect(app.stats().mark).toBe(1);
+    expect(app.stats().run).toBe(1);
+    expect(app.stats().patch).toBe(1);
   });
 
   it("compiles the official App.tee module", async () => {

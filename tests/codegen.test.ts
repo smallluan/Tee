@@ -16,6 +16,22 @@ describe("AOT factory codegen", () => {
     expect(body).toContain('"if"');
   });
 
+  it("emits a TwinMap row factory for native keyed repeats", () => {
+    const body = generateRenderBody(
+      parseHTML(`<li t-repeat="item in items" t-key="item.id">{{ item.name }}</li>`),
+    );
+    expect(body).toContain("__rt.rowFactory");
+    expect(body).toContain("__rt.repeat");
+    expect(body).not.toContain("__rt.mount");
+    expect(body).toContain('"item.name"');
+  });
+
+  it("falls back to the runtime walker for non-native repeat rows", () => {
+    const body = generateRenderBody(parseHTML(`<widget t-repeat="item in items" t-key="item.id"></widget>`));
+    expect(body).toContain("__rt.mount");
+    expect(body).not.toContain("__rt.rowFactory");
+  });
+
   it("compiles style lang into a Vite CSS query", () => {
     const js = compileSFC(`
       <template><i>x</i></template>

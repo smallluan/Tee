@@ -1,0 +1,17 @@
+<template>
+  <ul>
+    <li t-repeat="item in items" t-key="item.id">{{ item.name }}</li>
+  </ul>
+</template>
+
+<script>
+export default {
+  data: () => ({
+    items: [
+      { id: 1, name: "a" },
+      { id: 2, name: "b" },
+      { id: 3, name: "c" },
+    ],
+  }),
+};
+</script>

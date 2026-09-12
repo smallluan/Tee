@@ -17,6 +17,8 @@ export interface Site {
   run: () => void;
   rank?: number;
   linked?: boolean;
+  exact?: boolean;
+  debugLabel?: string;
   queued?: boolean;
   dead?: boolean;
   last?: unknown;

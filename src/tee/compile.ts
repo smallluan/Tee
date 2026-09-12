@@ -1,11 +1,27 @@
 import { display, isBooleanAttr, parseRepeat, splitInterpolation, writeText } from "./expr";
 import type { Engine } from "./engine";
-import { attrValue, isVoidTag, parseHTML, staticAttrs, type ElNode, type TmplNode } from "./html";
+import { attrValue, isAotNative, isVoidTag, parseHTML, staticAttrs, type ElNode, type TmplNode } from "./html";
 import { compileExpr } from "./ir";
-import { generateRenderBody, isAotNative } from "./codegen";
+import { generateRenderBody } from "./codegen";
+import {
+  buildRowSpec,
+  compileRowPath,
+  isFastRowTree,
+  keyedClassPlan,
+  materializeRowSkeleton,
+  type KeyedClassPlan,
+  type RowSpec,
+} from "./row-spec";
 import { Instance } from "./instance";
 import { touchList } from "./observe";
-import { runExpr, runStatement, type Scope, createRootScope } from "./scope";
+import {
+  runExpr,
+  runStatement,
+  type Scope,
+  createRootScope,
+  createRepeatScope,
+  createFastRepeatScope,
+} from "./scope";
 import { runSetup } from "./chart";
 import { Rank, rankOf } from "./strata";
 import type { Site, TagDef } from "./types";
@@ -256,6 +272,96 @@ function bindEvent(el: Element, spec: string, src: string, scope: Scope, mods: s
   el.addEventListener(eventName, handler, { capture, once });
 }
 
+type DelegatedBinding = { scope: Scope; src: string; mods: string[] };
+const DELEGATED_KEYS = new Map<string, symbol>();
+const DELEGATED_DOCUMENTS = new WeakMap<Document, Set<string>>();
+const DELEGATED_ROW_ROOT = Symbol("tee:row-root");
+const DELEGATED_ROW_SCOPE = Symbol("tee:row-scope");
+
+function runDelegatedBinding(
+  el: Element,
+  event: Event,
+  binding: DelegatedBinding | FastRowEvent,
+): void {
+  const { mods } = binding;
+  if (mods.includes("self") && event.target !== el) return;
+  const keyName = mods.map((mod) => KEY_MODS[mod]).find(Boolean);
+  if (keyName && (event as KeyboardEvent).key !== keyName) return;
+  if (mods.includes("prevent")) event.preventDefault();
+  if (mods.includes("stop")) event.stopPropagation();
+  try {
+    const scope =
+      "scope" in binding
+        ? binding.scope
+        : (
+            (el as Element & { [DELEGATED_ROW_ROOT]?: Element })[DELEGATED_ROW_ROOT] as
+              | (Element & { [DELEGATED_ROW_SCOPE]?: Scope })
+              | undefined
+          )?.[DELEGATED_ROW_SCOPE];
+    if (scope) runStatement(scope, binding.src, event);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function dispatchDelegated(event: Event, key: symbol): void {
+  const path = event.composedPath?.() ?? [];
+  const fallback: EventTarget[] = [];
+  if (path.length === 0) {
+    let node = event.target as Node | null;
+    while (node) {
+      fallback.push(node);
+      node = node.parentNode;
+    }
+  }
+  const nodes = path.length ? path : fallback;
+  let current: Element | null = null;
+  try {
+    Object.defineProperty(event, "currentTarget", {
+      configurable: true,
+      get: () => current,
+    });
+  } catch {
+    // Older DOM shims may expose a non-configurable currentTarget.
+  }
+  for (const target of nodes) {
+    if (!(target instanceof Element)) continue;
+    const binding = (
+      target as Element & { [key: symbol]: DelegatedBinding | FastRowEvent | undefined }
+    )[key];
+    if (!binding || target.hasAttribute("disabled")) continue;
+    current = target;
+    runDelegatedBinding(target, event, binding);
+    if (event.cancelBubble) break;
+  }
+  current = null;
+}
+
+function bindFastEvent(el: Element, binding: FastRowEvent, root: Element, scope: Scope): void {
+  const { event: eventName, src, mods } = binding;
+  if (mods.includes("capture") || mods.includes("once")) {
+    bindEvent(el, eventName, src, scope, mods);
+    return;
+  }
+  let key = DELEGATED_KEYS.get(eventName);
+  if (!key) {
+    key = Symbol(`tee:${eventName}`);
+    DELEGATED_KEYS.set(eventName, key);
+  }
+  (el as Element & { [key: symbol]: FastRowEvent })[key] = binding;
+  (el as Element & { [DELEGATED_ROW_ROOT]: Element })[DELEGATED_ROW_ROOT] = root;
+  const doc = el.ownerDocument;
+  let installed = DELEGATED_DOCUMENTS.get(doc);
+  if (!installed) {
+    installed = new Set();
+    DELEGATED_DOCUMENTS.set(doc, installed);
+  }
+  if (!installed.has(eventName)) {
+    installed.add(eventName);
+    doc.addEventListener(eventName, (event) => dispatchDelegated(event, key));
+  }
+}
+
 function bindModel(el: Element, path: string, scope: Scope, ctx: CompileContext, mods: string[] = []): void {
   const isCheck = el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio");
   const eventName = mods.includes("lazy") || isCheck || el instanceof HTMLSelectElement ? "change" : "input";
@@ -328,34 +434,418 @@ function bindShow(el: Element, scope: Scope, ctx: CompileContext): void {
   });
 }
 
-function patchRepeatDom(start: Node, end: Node, ordered: Array<{ nodes: Node[] }>): void {
+function longestIncreasingSubsequence(values: number[]): Set<number> {
+  const tails: number[] = [];
+  const prev = new Int32Array(values.length);
+  prev.fill(-1);
+
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+    if (value < 0) continue;
+    let lo = 0;
+    let hi = tails.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (values[tails[mid]] < value) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo > 0) prev[i] = tails[lo - 1];
+    tails[lo] = i;
+  }
+
+  const kept = new Set<number>();
+  let cursor = tails.length ? tails[tails.length - 1] : -1;
+  while (cursor >= 0) {
+    kept.add(cursor);
+    cursor = prev[cursor];
+  }
+  return kept;
+}
+
+function insertRepeatRange(
+  parent: Node,
+  ordered: Array<{ nodes: Node[] }>,
+  from: number,
+  to: number,
+  anchor: Node,
+): void {
+  if (from > to) return;
+  const fragment = document.createDocumentFragment();
+  for (let i = from; i <= to; i++) {
+    for (const node of ordered[i].nodes) fragment.appendChild(node);
+  }
+  parent.insertBefore(fragment, anchor);
+}
+
+function clearRepeatDom(start: Node, end: Node): void {
+  const parent = start.parentNode;
+  if (!parent || parent !== end.parentNode || start.nextSibling === end) return;
+  if (parent.firstChild === start && parent.lastChild === end) {
+    parent.replaceChildren(start, end);
+    return;
+  }
+  let node = start.nextSibling;
+  while (node && node !== end) {
+    const next = node.nextSibling;
+    parent.removeChild(node);
+    node = next;
+  }
+}
+
+function patchRepeatDom(
+  end: Node,
+  ordered: Array<{ nodes: Node[] }>,
+  oldPositions: number[],
+  reused: number,
+): void {
   const parent = end.parentNode;
   if (!parent) return;
-  let attached = 0;
-  let total = 0;
-  for (const row of ordered) {
-    for (const live of row.nodes) {
-      total += 1;
-      if (live.parentNode === parent) attached += 1;
-    }
-  }
-  if (total === 0) return;
-  if (attached === 0) {
+  if (ordered.length === 0) return;
+  if (reused === 0) {
     const frag = document.createDocumentFragment();
     for (const row of ordered) for (const live of row.nodes) frag.appendChild(live);
     parent.insertBefore(frag, end);
     return;
   }
-  let cursor: Node = start;
-  for (const row of ordered) {
-    for (const live of row.nodes) {
-      if (cursor.nextSibling !== live) parent.insertBefore(live, cursor.nextSibling);
-      cursor = live;
-    }
+
+  let appendOnly = reused < ordered.length;
+  for (let i = 0; appendOnly && i < ordered.length; i++) {
+    if (oldPositions[i] !== (i < reused ? i : -1)) appendOnly = false;
   }
+  if (appendOnly) {
+    insertRepeatRange(parent, ordered, reused, ordered.length - 1, end);
+    return;
+  }
+
+  const displaced: number[] = [];
+  for (let i = 0; i < oldPositions.length && displaced.length < 3; i++) {
+    if (oldPositions[i] !== i) displaced.push(i);
+  }
+  if (
+    displaced.length === 2 &&
+    oldPositions[displaced[0]] === displaced[1] &&
+    oldPositions[displaced[1]] === displaced[0]
+  ) {
+    const first = ordered[displaced[0]];
+    const second = ordered[displaced[1]];
+    const firstNode = first.nodes[0];
+    const secondNext = second.nodes.at(-1)?.nextSibling ?? end;
+    insertRepeatRange(parent, ordered, displaced[1], displaced[1], firstNode);
+    insertRepeatRange(parent, ordered, displaced[0], displaced[0], secondNext);
+    return;
+  }
+
+  const kept = longestIncreasingSubsequence(oldPositions);
+  let anchor = end;
+  let pendingEnd = -1;
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    if (!kept.has(i)) {
+      if (pendingEnd < 0) pendingEnd = i;
+      continue;
+    }
+    if (pendingEnd >= 0) {
+      insertRepeatRange(parent, ordered, i + 1, pendingEnd, anchor);
+      pendingEnd = -1;
+    }
+    anchor = ordered[i].nodes[0] ?? anchor;
+  }
+  if (pendingEnd >= 0) insertRepeatRange(parent, ordered, 0, pendingEnd, anchor);
 }
 
-function rowRenderer(node: ElNode): (parent: Node, scope: Scope, ctx: CompileContext) => void {
+type FastRowBinding = {
+  path: number[];
+  src: string;
+  name: string | null;
+  base: string;
+  plan: ReturnType<typeof compileExpr>;
+  mode: "reactive" | "once" | "skip";
+  directPath: string[] | null;
+  directRoot: string | null;
+  nodeOf: (root: Node) => Node;
+};
+
+type FastRowEvent = {
+  path: number[];
+  event: string;
+  src: string;
+  mods: string[];
+};
+
+function readFastBinding(binding: FastRowBinding, scope: Scope): unknown {
+  if (binding.directPath) {
+    let value = scope.$lookup(binding.directRoot!);
+    for (const part of binding.directPath) {
+      const raw =
+        value && typeof value === "object"
+          ? ((value as { __teeRaw?: Record<string, unknown> }).__teeRaw ?? value)
+          : value;
+      value = (raw as Record<string, unknown> | null)?.[part];
+    }
+    return value;
+  }
+  if (binding.plan.run) return binding.plan.run((name) => scope.$lookup(name));
+  return runExpr(scope, binding.src);
+}
+
+function applyFastBinding(binding: FastRowBinding, node: Node, value: unknown): unknown {
+  if (binding.name == null) {
+    writeText(node as Text, value);
+    return value;
+  }
+  const el = node as Element;
+  if (binding.name === "class") {
+    const next = [binding.base, classToString(value)].filter(Boolean).join(" ");
+    if (el.getAttribute("class") !== next) {
+      if (next) el.setAttribute("class", next);
+      else el.removeAttribute("class");
+    }
+    return next;
+  }
+  if (binding.name === "style") {
+    const next = styleToString(value);
+    if (el.getAttribute("style") !== next) {
+      if (next) el.setAttribute("style", next);
+      else el.removeAttribute("style");
+    }
+    return next;
+  }
+  applyAttr(el, binding.name, value);
+  return value;
+}
+
+function directBindingProp(binding: FastRowBinding, scope: Scope): string | null {
+  if (!binding.directPath || !binding.directRoot) return null;
+  let owner = scope.$lookup(binding.directRoot);
+  for (let i = 0; i < binding.directPath.length - 1; i++) {
+    owner = (owner as Record<string, unknown> | null)?.[binding.directPath[i]];
+  }
+  if (owner == null || typeof owner !== "object") return null;
+  const id = (owner as { __teeId?: string }).__teeId;
+  return id ? `${id}.${binding.directPath[binding.directPath.length - 1]}` : null;
+}
+
+type SingleDirectRowSite = Site & {
+  engine: Engine;
+  binding: FastRowBinding;
+  target: Node;
+  scope: Scope;
+  value: unknown;
+  initialized: boolean;
+};
+
+function runSingleDirectRowSite(this: SingleDirectRowSite): void {
+  if (this.dead) return;
+  if (!this.linked) {
+    const prop = directBindingProp(this.binding, this.scope);
+    if (prop == null) return;
+    this.engine.maps.linkOne(this, prop, this.binding.directPath!.at(-1)!);
+    this.linked = true;
+  }
+  const next = readFastBinding(this.binding, this.scope);
+  if (!this.initialized || !Object.is(next, this.value)) {
+    this.value = applyFastBinding(this.binding, this.target, next);
+    this.engine.stats.patch += 1;
+  } else {
+    this.engine.stats.skipEqual += 1;
+  }
+  this.initialized = true;
+}
+
+function addSingleDirectRowSite(
+  engine: Engine,
+  instance: Instance,
+  root: Element,
+  binding: FastRowBinding,
+  node: Node,
+  scope: Scope,
+): void {
+  const site: SingleDirectRowSite = {
+    id: engine.nextSiteId(),
+    kind: "attr",
+    node: root,
+    label: "repeat row bindings",
+    rank: Rank.Leaf,
+    exact: true,
+    engine,
+    binding,
+    target: node,
+    scope,
+    value: undefined,
+    initialized: false,
+    run: runSingleDirectRowSite,
+  };
+  instance.sites.push(site);
+  site.run();
+}
+
+function addDirectRowSite(
+  engine: Engine,
+  instance: Instance,
+  root: Element,
+  bindings: FastRowBinding[],
+  nodes: Node[],
+  scope: Scope,
+): void {
+  const values = new Array<unknown>(bindings.length);
+  let initialized = false;
+  const site: Site = {
+    id: engine.nextSiteId(),
+    kind: "attr",
+    node: root,
+    label: "repeat row bindings",
+    rank: Rank.Leaf,
+    exact: true,
+    run() {
+      if (site.dead) return;
+      if (!site.linked) {
+        const props = bindings.map((binding) => directBindingProp(binding, scope));
+        if (props.some((prop) => prop == null)) return;
+        engine.maps.link(site, props as string[], bindings.map((binding) => binding.directPath!.at(-1)!));
+        site.linked = true;
+      }
+      for (let i = 0; i < bindings.length; i++) {
+        const value = readFastBinding(bindings[i], scope);
+        if (!initialized || !Object.is(value, values[i])) {
+          values[i] = applyFastBinding(bindings[i], nodes[i], value);
+          engine.stats.patch += 1;
+        } else {
+          engine.stats.skipEqual += 1;
+        }
+      }
+      initialized = true;
+    },
+  };
+  instance.sites.push(site);
+  site.run();
+}
+
+type RowRenderer = ((parent: Node, scope: Scope, ctx: CompileContext) => void) & {
+  fastScope?: boolean;
+  usesIndex?: boolean;
+  classPlan?: ReturnType<typeof keyedClassPlan>;
+  create?: (scope: Scope, ctx: CompileContext, instance: Instance) => Element;
+};
+
+function rowTemplate(spec: RowSpec, scopeId?: string): () => Element {
+  let proto: Element | undefined;
+  return () => {
+    if (!proto) proto = materializeRowSkeleton(spec.root, scopeId) as Element;
+    return proto.cloneNode(true) as Element;
+  };
+}
+
+function createFastRowRendererFromSpec(spec: RowSpec): RowRenderer {
+  const clone = rowTemplate(spec);
+  let scopedClone: (() => Element) | undefined;
+  let scopedId: string | undefined;
+  const bindings: FastRowBinding[] = spec.bindings.map((binding) => ({
+    ...binding,
+    plan: compileExpr(binding.src),
+    nodeOf: compileRowPath(binding.path),
+  }));
+  const reactiveBindings = bindings.filter((binding) => binding.mode === "reactive");
+  const onceBindings = bindings.filter((binding) => binding.mode === "once");
+  const eventGets = spec.events.map((event) => compileRowPath(event.path));
+  const refGets = spec.refs.map((ref) => compileRowPath(ref.path));
+
+  const create = (scope: Scope, ctx: CompileContext, instance: Instance): Element => {
+    let make = clone;
+    if (ctx.scopeId) {
+      if (ctx.scopeId !== scopedId) {
+        scopedId = ctx.scopeId;
+        scopedClone = rowTemplate(spec, ctx.scopeId);
+      }
+      make = scopedClone ?? clone;
+    }
+    const root = make();
+    if (spec.events.length) {
+      (root as Element & { [DELEGATED_ROW_SCOPE]: Scope })[DELEGATED_ROW_SCOPE] = scope;
+    }
+    for (let i = 0; i < spec.events.length; i++) {
+      bindFastEvent(eventGets[i](root) as Element, spec.events[i], root, scope);
+    }
+    for (let i = 0; i < spec.refs.length; i++) {
+      bindRef(refGets[i](root) as Element, spec.refs[i].name, scope);
+    }
+    for (const binding of onceBindings) {
+      applyFastBinding(binding, binding.nodeOf(root), readFastBinding(binding, scope));
+    }
+
+    if (reactiveBindings.length === 1 && reactiveBindings[0].directPath) {
+      addSingleDirectRowSite(
+        ctx.engine,
+        instance,
+        root,
+        reactiveBindings[0],
+        reactiveBindings[0].nodeOf(root),
+        scope,
+      );
+    } else if (reactiveBindings.length) {
+      const bindingNodes = reactiveBindings.map((binding) => binding.nodeOf(root));
+      if (reactiveBindings.every((binding) => binding.directPath)) {
+        addDirectRowSite(ctx.engine, instance, root, reactiveBindings, bindingNodes, scope);
+      } else {
+        const values = new Array<unknown>(reactiveBindings.length);
+        let initialized = false;
+        addSite(instance === ctx.instance ? ctx : { ...ctx, instance }, {
+          kind: "attr",
+          node: root,
+          label: "repeat row bindings",
+          rank: Rank.Expr,
+          run() {
+            if (this.dead) return;
+            const engine = ctx.engine;
+            if (this.linked && !engine.stale(this)) {
+              engine.stats.skipClock += 1;
+              return;
+            }
+            engine.startTrack();
+            try {
+              for (let i = 0; i < reactiveBindings.length; i++) {
+                const binding = reactiveBindings[i];
+                const value = readFastBinding(binding, scope);
+                const normalized =
+                  binding.name === "class"
+                    ? [binding.base, classToString(value)].filter(Boolean).join(" ")
+                    : binding.name === "style"
+                      ? styleToString(value)
+                      : value;
+                if (!initialized || !Object.is(normalized, values[i])) {
+                  values[i] = applyFastBinding(binding, bindingNodes[i], value);
+                  engine.stats.patch += 1;
+                } else {
+                  engine.stats.skipEqual += 1;
+                }
+              }
+            } catch (error) {
+              console.error(error);
+            } finally {
+              engine.commitTrack(this, engine.stopTrack());
+            }
+            initialized = true;
+          },
+        });
+      }
+    }
+    return root;
+  };
+  const render = ((parent: Node, scope: Scope, ctx: CompileContext) => {
+    parent.appendChild(create(scope, ctx, ctx.instance));
+  }) as RowRenderer;
+  render.fastScope = true;
+  render.usesIndex = spec.usesIndex;
+  render.classPlan = spec.classPlan;
+  render.create = create;
+  return render;
+}
+
+function rowRenderer(
+  node: ElNode,
+  keySrc: string | null = null,
+  itemName = "item",
+  indexName = "$index",
+): RowRenderer {
+  if (isFastRowTree(node)) return createFastRowRendererFromSpec(buildRowSpec(node, itemName, indexName, keySrc));
   if (isAotNative(node)) {
     const body = generateRenderBody([node]);
     const fn = new Function("__rt", "parent", "s", "ctx", body);
@@ -364,6 +854,12 @@ function rowRenderer(node: ElNode): (parent: Node, scope: Scope, ctx: CompileCon
     };
   }
   return (parent, scope, ctx) => mountNode(node, parent, scope, ctx);
+}
+
+function repeatRowElement(row: RepeatRow | undefined): Element | null {
+  if (!row) return null;
+  for (const node of row.nodes) if (node.nodeType === 1) return node as Element;
+  return null;
 }
 
 type RepeatRow = {
@@ -375,8 +871,151 @@ type RepeatRow = {
   index: number;
 };
 
+function createRepeatRow(
+  item: unknown,
+  index: number,
+  key: string,
+  parsed: { item: string; index: string },
+  scope: Scope,
+  ctx: CompileContext,
+  render: RowRenderer,
+): RepeatRow {
+  const inst = ctx.instance.child(Boolean(render.fastScope));
+  const liveScope = render.fastScope
+    ? createFastRepeatScope(scope, parsed.item, parsed.index, item, index, inst)
+    : createRepeatScope(scope, { [parsed.item]: item, [parsed.index]: index }, inst);
+  if (render.create) {
+    const root = render.create(liveScope, ctx, inst);
+    return { key, inst, nodes: [root], scope: liveScope, item, index };
+  }
+  const holder = document.createDocumentFragment();
+  render(holder, liveScope, { ...ctx, instance: inst });
+  return { key, inst, nodes: [...holder.childNodes], scope: liveScope, item, index };
+}
+
+function updateRepeatIndex(
+  row: RepeatRow,
+  index: number,
+  parsed: { item: string; index: string },
+  render: RowRenderer,
+  ctx: CompileContext,
+): void {
+  if (row.index === index) return;
+  row.index = index;
+  row.scope[parsed.index] = index;
+  if (render.usesIndex === false) return;
+  for (const site of row.inst.sites) {
+    site.linked = false;
+    ctx.engine.mark(site);
+  }
+}
+
+function patchRepeatSwap(end: Node, ordered: RepeatRow[], firstIndex: number, secondIndex: number): void {
+  const parent = end.parentNode;
+  if (!parent) return;
+  const first = ordered[firstIndex];
+  const second = ordered[secondIndex];
+  const firstNode = first.nodes[0];
+  const secondNext = second.nodes.at(-1)?.nextSibling ?? end;
+  insertRepeatRange(parent, ordered, secondIndex, secondIndex, firstNode);
+  insertRepeatRange(parent, ordered, firstIndex, firstIndex, secondNext);
+}
+
+function reconcileSimpleRepeatMutation(
+  items: unknown[],
+  previous: RepeatRow[],
+  rows: Map<string, RepeatRow>,
+  parsed: { item: string; index: string },
+  keySrc: string | null,
+  scope: Scope,
+  ctx: CompileContext,
+  end: Node,
+  render: RowRenderer,
+): RepeatRow[] | null {
+  const delta = items.length - previous.length;
+  if (delta > 0) {
+    let index = 0;
+    while (index < previous.length && Object.is(items[index], previous[index].item)) index += 1;
+    for (let old = index; old < previous.length; old++) {
+      if (!Object.is(items[old + delta], previous[old].item)) return null;
+    }
+
+    const keys: string[] = [];
+    const inserted = new Set<string>();
+    for (let offset = 0; offset < delta; offset++) {
+      const itemIndex = index + offset;
+      let key = keyFor(items[itemIndex], itemIndex, keySrc, parsed.item, parsed.index, scope);
+      if (rows.has(key)) return null;
+      while (inserted.has(key)) key += "#" + itemIndex;
+      inserted.add(key);
+      keys.push(key);
+    }
+
+    const additions = new Array<RepeatRow>(delta);
+    for (let offset = 0; offset < delta; offset++) {
+      const itemIndex = index + offset;
+      const row = createRepeatRow(items[itemIndex], itemIndex, keys[offset], parsed, scope, ctx, render);
+      additions[offset] = row;
+      rows.set(row.key, row);
+    }
+    const anchor = previous[index]?.nodes[0] ?? end;
+    insertRepeatRange(end.parentNode!, additions, 0, additions.length - 1, anchor);
+    const ordered = previous.slice();
+    ordered.splice(index, 0, ...additions);
+    for (let next = index + delta; next < ordered.length; next++) {
+      updateRepeatIndex(ordered[next], next, parsed, render, ctx);
+    }
+    return ordered;
+  }
+
+  if (delta < 0) {
+    const removedCount = -delta;
+    let index = 0;
+    while (index < items.length && Object.is(items[index], previous[index].item)) index += 1;
+    for (let next = index; next < items.length; next++) {
+      if (!Object.is(items[next], previous[next + removedCount].item)) return null;
+    }
+
+    const ordered = previous.slice();
+    const removed = ordered.splice(index, removedCount);
+    for (const row of removed) {
+      row.inst.destroy();
+      for (const node of row.nodes) node.parentNode?.removeChild(node);
+      rows.delete(row.key);
+    }
+    for (let next = index; next < ordered.length; next++) {
+      updateRepeatIndex(ordered[next], next, parsed, render, ctx);
+    }
+    return ordered;
+  }
+
+  if (items.length > 1) {
+    const displaced: number[] = [];
+    for (let index = 0; index < items.length && displaced.length < 3; index++) {
+      if (!Object.is(items[index], previous[index]?.item)) displaced.push(index);
+    }
+    if (
+      displaced.length === 2 &&
+      Object.is(items[displaced[0]], previous[displaced[1]].item) &&
+      Object.is(items[displaced[1]], previous[displaced[0]].item)
+    ) {
+      const ordered = previous.slice();
+      [ordered[displaced[0]], ordered[displaced[1]]] = [
+        ordered[displaced[1]],
+        ordered[displaced[0]],
+      ];
+      updateRepeatIndex(ordered[displaced[0]], displaced[0], parsed, render, ctx);
+      updateRepeatIndex(ordered[displaced[1]], displaced[1], parsed, render, ctx);
+      patchRepeatSwap(end, ordered, displaced[0], displaced[1]);
+      return ordered;
+    }
+  }
+  return null;
+}
+
 function reconcileRepeat(
   items: unknown[],
+  previous: RepeatRow[],
   rows: Map<string, RepeatRow>,
   parsed: { item: string; index: string },
   keySrc: string | null,
@@ -384,13 +1023,36 @@ function reconcileRepeat(
   ctx: CompileContext,
   start: Node,
   end: Node,
-  render: (parent: Node, scope: Scope, ctx: CompileContext) => void,
-): void {
+  render: RowRenderer,
+): RepeatRow[] {
+  if (items.length === 0 && rows.size) {
+    for (const row of rows.values()) row.inst.destroy();
+    rows.clear();
+    clearRepeatDom(start, end);
+    return [];
+  }
+
+  const simple = reconcileSimpleRepeatMutation(
+    items,
+    previous,
+    rows,
+    parsed,
+    keySrc,
+    scope,
+    ctx,
+    end,
+    render,
+  );
+  if (simple) return simple;
+
+  const previousSize = rows.size;
   const used = new Set<string>();
   const ordered: RepeatRow[] = [];
+  const oldPositions: number[] = [];
   let created = false;
   let removed = false;
   let moved = false;
+  let reused = 0;
 
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
@@ -400,36 +1062,46 @@ function reconcileRepeat(
     let row = rows.get(key);
     if (!row) {
       created = true;
-      const inst = ctx.instance.child();
-      const liveScope = scope.$child({ [parsed.item]: item, [parsed.index]: index });
-      const holder = document.createDocumentFragment();
-      render(holder, liveScope, { ...ctx, instance: inst });
-      row = { key, inst, nodes: [...holder.childNodes], scope: liveScope, item, index };
+      oldPositions.push(-1);
+      row = createRepeatRow(item, index, key, parsed, scope, ctx, render);
       rows.set(key, row);
     } else {
+      reused += 1;
+      oldPositions.push(row.index);
+      let localsChanged = false;
       if (!Object.is(row.item, item)) {
         row.item = item;
         row.scope[parsed.item] = item;
+        localsChanged = true;
       }
       if (row.index !== index) {
         moved = true;
         row.index = index;
         row.scope[parsed.index] = index;
+        if (render.usesIndex !== false) localsChanged = true;
+      }
+      if (localsChanged) {
+        for (const site of row.inst.sites) {
+          site.linked = false;
+          ctx.engine.mark(site);
+        }
       }
     }
     ordered.push(row);
   }
 
+  const replaceAll = previousSize > 0 && created && reused === 0;
+  if (replaceAll) clearRepeatDom(start, end);
   for (const [key, row] of rows) {
     if (used.has(key)) continue;
     removed = true;
     row.inst.destroy();
-    for (const live of row.nodes) live.parentNode?.removeChild(live);
+    if (!replaceAll) for (const live of row.nodes) live.parentNode?.removeChild(live);
     rows.delete(key);
   }
 
-  if (!created && !removed && !moved) return;
-  patchRepeatDom(start, end, ordered);
+  if (created || moved) patchRepeatDom(end, ordered, oldPositions, reused);
+  return ordered;
 }
 
 function bindRepeat(el: Element, scope: Scope, ctx: CompileContext): void {
@@ -438,37 +1110,32 @@ function bindRepeat(el: Element, scope: Scope, ctx: CompileContext): void {
   el.removeAttribute("t-repeat");
   el.removeAttribute("t-key");
   const parsed = parseRepeat(stmt);
-  const template = el.cloneNode(true) as Element;
+  const html = el.outerHTML;
   const start = document.createComment("t-repeat");
   const end = document.createComment("/t-repeat");
   el.replaceWith(start);
   start.parentNode?.insertBefore(end, start.nextSibling);
-  const rows = new Map<string, RepeatRow>();
-
-  addSite(ctx, {
-    kind: "repeat",
-    node: start,
-    label: `t-repeat ${stmt}`,
-    rank: Rank.Structure,
-    run() {
-      applyReactive(this, ctx, scope, parsed.list, (list) => {
-        reconcileRepeat(
-          Array.isArray(list) ? list : [],
-          rows,
-          parsed,
-          keySrc,
-          scope,
-          ctx,
-          start,
-          end,
-          (parent, liveScope, inner) => {
-            const node = template.cloneNode(true) as Element;
-            parent.append(...compileDetached(node, liveScope, inner));
-          },
-        );
-      });
-    },
-  });
+  const ast = parseHTML(html)[0];
+  const render =
+    ast && ast.t === "el"
+      ? rowRenderer(ast, keySrc, parsed.item, parsed.index)
+      : (((parent, liveScope, inner) => {
+          const holder = document.createElement("template");
+          holder.innerHTML = html;
+          const node = holder.content.firstChild;
+          if (node) parent.append(...compileDetached(node, liveScope, inner));
+        }) as RowRenderer);
+  startRepeat(
+    start,
+    end,
+    scope,
+    ctx,
+    parsed,
+    keySrc,
+    render,
+    stmt,
+    render.classPlan ?? (ast && ast.t === "el" ? keyedClassPlan(ast, parsed.item, keySrc) : null),
+  );
 }
 
 function collectFillers(host: Element): Record<string, Node[]> {
@@ -593,7 +1260,7 @@ function applyReactive(
     return runExpr(scope, src);
   };
 
-  if (plan.stable && site.linked) {
+  if (plan.stable && site.linked && site.kind !== "repeat") {
     let value: unknown;
     try {
       value = read();
@@ -648,7 +1315,11 @@ function keyFor(
     let cur: unknown = item;
     for (const part of trimmed.slice(prefix.length).split(".")) {
       if (cur == null) return String(index);
-      cur = (cur as Record<string, unknown>)[part];
+      const raw =
+        typeof cur === "object"
+          ? ((cur as { __teeRaw?: Record<string, unknown> }).__teeRaw ?? cur)
+          : cur;
+      cur = (raw as Record<string, unknown>)[part];
     }
     return String(cur);
   }
@@ -888,8 +1559,35 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
   const end = document.createComment("/t-repeat");
   parent.appendChild(start);
   parent.appendChild(end);
+  const render = rowRenderer(stripped, keySrc, parsed.item, parsed.index);
+  startRepeat(
+    start,
+    end,
+    scope,
+    ctx,
+    parsed,
+    keySrc,
+    render,
+    stmt,
+    render.classPlan ?? keyedClassPlan(stripped, parsed.item, keySrc),
+  );
+}
+
+function startRepeat(
+  start: Node,
+  end: Node,
+  scope: Scope,
+  ctx: CompileContext,
+  parsed: { item: string; index: string; list: string },
+  keySrc: string | null,
+  render: RowRenderer,
+  stmt: string,
+  classPlan: KeyedClassPlan | null = render.classPlan ?? null,
+): void {
   const rows = new Map<string, RepeatRow>();
-  const render = rowRenderer(stripped);
+  let orderedRows: RepeatRow[] = [];
+  let selectedKey: string | null = null;
+  let syncSelectedRow = () => undefined;
 
   addSite(ctx, {
     kind: "repeat",
@@ -898,8 +1596,9 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
     rank: Rank.Structure,
     run() {
       applyReactive(this, ctx, scope, parsed.list, (list) => {
-        reconcileRepeat(
+        orderedRows = reconcileRepeat(
           Array.isArray(list) ? list : [],
+          orderedRows,
           rows,
           parsed,
           keySrc,
@@ -909,9 +1608,33 @@ function mountRepeatNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileC
           end,
           render,
         );
+        syncSelectedRow();
       });
     },
   });
+
+  if (classPlan) {
+    const setSelected = (key: string | null, on: boolean) => {
+      const el = key == null ? null : repeatRowElement(rows.get(key));
+      el?.classList.toggle(classPlan.className, on);
+    };
+    syncSelectedRow = () => setSelected(selectedKey, true);
+    addSite(ctx, {
+      kind: "attr",
+      node: start,
+      label: `keyed class ${classPlan.selectedSrc}`,
+      rank: rankOf("attr", compileExpr(classPlan.selectedSrc).stable),
+      run() {
+        applyReactive(this, ctx, scope, classPlan.selectedSrc, (value) => {
+          const next = value == null ? null : String(value);
+          if (next === selectedKey) return;
+          setSelected(selectedKey, false);
+          selectedKey = next;
+          setSelected(selectedKey, true);
+        });
+      },
+    });
+  }
 }
 
 function mountTagNode(node: ElNode, parent: Node, scope: Scope, ctx: CompileContext): void {
@@ -1160,5 +1883,36 @@ export const rt = {
   },
   nodes(parent: Node, scope: Scope, ctx: CompileContext, nodes: TmplNode[]) {
     mountAST(nodes, parent, scope, ctx);
+  },
+  rowFactory: createFastRowRendererFromSpec,
+  repeat(
+    parent: Node,
+    scope: Scope,
+    ctx: CompileContext,
+    meta: {
+      list: string;
+      item: string;
+      index: string;
+      key: string | null;
+      classPlan: KeyedClassPlan | null;
+    },
+    factory: RowRenderer,
+  ) {
+    const start = document.createComment("t-repeat");
+    const end = document.createComment("/t-repeat");
+    parent.appendChild(start);
+    parent.appendChild(end);
+    if (meta.classPlan) factory.classPlan = meta.classPlan;
+    startRepeat(
+      start,
+      end,
+      scope,
+      ctx,
+      { item: meta.item, index: meta.index, list: meta.list },
+      meta.key,
+      factory,
+      `${meta.item} in ${meta.list}`,
+      meta.classPlan ?? factory.classPlan ?? null,
+    );
   },
 };

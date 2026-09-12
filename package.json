@@ -39,6 +39,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "create": "node scripts/create-tee.mjs",
+    "bench:install": "node scripts/install-js-benchmark.mjs",
     "prepublishOnly": "vitest run && npm run build"
   },
   "peerDependencies": {
