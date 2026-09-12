@@ -111,6 +111,8 @@ npm install
 npm run dev
 ```
 
+新项目出厂带 `CLAUDE.md`、`AGENTS.md` 和 `skill/`。AI 先读 `skill/SKILL.md` 再打开对应主题，不要按 React / Vue 猜 API。框架包里也有一份：`node_modules/tee-framework/skill/`.
+
 本仓库：
 
 ```bash

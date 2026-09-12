@@ -27,6 +27,11 @@ if (existsSync(dest) && readdirSync(dest).length > 0) {
 
 cpSync(template, dest, { recursive: true });
 
+const skill = join(root, "skill");
+if (existsSync(skill)) {
+  cpSync(skill, join(dest, "skill"), { recursive: true });
+}
+
 const vsix = join(root, "editor", "tee-language.vsix");
 if (existsSync(vsix)) {
   mkdirSync(join(dest, ".vscode"), { recursive: true });
@@ -57,4 +62,6 @@ console.log(`
   Command Palette → Extensions: Install from VSIX…
   → ${existsSync(vsix) ? ".vscode/tee-language.vsix" : "node_modules/tee-framework/editor/tee-language.vsix"}
   then reload. Tab icon should be a gold T, not a generic text file.
+
+  Agents: read CLAUDE.md / AGENTS.md → skill/SKILL.md (do not guess React/Vue APIs).
 `);

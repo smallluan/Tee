@@ -25,6 +25,11 @@ describe("create-tee", () => {
       expect(readFileSync(join(dest, "src/main.ts"), "utf8")).toContain("Tee.create");
       expect(readFileSync(join(dest, ".vscode/settings.json"), "utf8")).toContain('"*.tee": "tee"');
       expect(existsSync(join(dest, ".vscode/tee-language.vsix"))).toBe(true);
+      expect(readFileSync(join(dest, "CLAUDE.md"), "utf8")).toContain("skill/SKILL.md");
+      expect(readFileSync(join(dest, "AGENTS.md"), "utf8")).toContain("skill/SKILL.md");
+      expect(readFileSync(join(dest, "skill/SKILL.md"), "utf8")).toContain("Hard rules");
+      expect(existsSync(join(dest, "skill/lists.md"))).toBe(true);
+      expect(existsSync(join(dest, ".cursor/skills/tee/SKILL.md"))).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
