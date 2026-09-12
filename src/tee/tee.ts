@@ -18,7 +18,7 @@ import type { MapSnapshot, TagDef, TeeOptions, TeePlugin } from "./types";
 const registry = new Map<string, TagDef>();
 let currentApp: TeeApp | null = null;
 
-export const version = "0.8.8";
+export const version = "0.8.9";
 
 export function define(name: string, def: TagDef): TagDef {
   registry.set(name.toLowerCase(), def);

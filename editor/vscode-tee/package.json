@@ -2,7 +2,7 @@
   "name": "tee-language",
   "displayName": "Tee",
   "description": "Syntax, IntelliSense, and file icon for Tee `.tee` single-file components.",
-  "version": "0.8.8",
+  "version": "0.8.9",
   "publisher": "tee",
   "icon": "icons/tee.png",
   "engines": {
@@ -33,7 +33,7 @@
           "source.ts": "typescript",
           "source.js": "javascript",
           "source.css": "css",
-          "source.less": "less",
+          "source.css.less": "less",
           "source.css.scss": "scss",
           "text.html.tee": "html"
         }
